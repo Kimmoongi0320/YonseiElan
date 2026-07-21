@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { XIcon } from "./icons";
 
 type ModalProps = {
@@ -9,6 +10,31 @@ type ModalProps = {
 };
 
 export function Modal({ open, onClose, children }: ModalProps) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const pushedHistoryRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    window.history.pushState({ modalOpen: true }, "");
+    pushedHistoryRef.current = true;
+
+    const handlePopState = () => {
+      pushedHistoryRef.current = false;
+      onCloseRef.current();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (pushedHistoryRef.current) {
+        pushedHistoryRef.current = false;
+        window.history.back();
+      }
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return (
