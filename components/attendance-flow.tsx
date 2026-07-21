@@ -86,7 +86,6 @@ export function AttendanceFlow() {
     setSelected(student);
     setPhase("confirm");
     setStatusLoading(true);
-    setNow(Date.now());
     try {
       const res = await fetch(`/api/attendance/status?studentId=${student.id}`);
       const data = await res.json();
@@ -208,7 +207,10 @@ export function AttendanceFlow() {
                 <button
                   key={s.id}
                   type="button"
-                  onClick={() => selectStudent(s)}
+                  onClick={() => {
+                    setNow(Date.now());
+                    selectStudent(s);
+                  }}
                   className="flex items-center gap-3 rounded-2xl border border-navy-900/10 bg-navy-50 px-5 py-4 text-left transition-colors hover:bg-navy-100 active:scale-[0.98]"
                 >
                   <UserIcon className="h-6 w-6 text-navy-700" />
