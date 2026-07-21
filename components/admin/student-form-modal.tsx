@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, type ChangeEvent } from "react";
 import { Modal } from "@/components/modal";
 import { upsertStudentAction, type StudentFormState } from "@/app/admin/actions";
 import type { AdminStudent } from "@/lib/students";
@@ -8,6 +8,26 @@ import { DAY_KEYS, DAY_LABELS } from "@/lib/schedule";
 
 const inputClass =
   "w-full rounded-2xl border border-navy-900/10 bg-white px-4 py-3 text-navy-900 placeholder:text-navy-900/30 focus:outline-none focus:ring-2 focus:ring-navy-900/20";
+
+const PHONE_PATTERN = "0\\d{1,2}-?\\d{3,4}-?\\d{4}";
+
+function formatPhoneNumber(digits: string) {
+  const isSeoul = digits.startsWith("02");
+  const areaLength = isSeoul ? 2 : 3;
+  const area = digits.slice(0, areaLength);
+  const rest = digits.slice(areaLength);
+
+  // 총 국번+뒷자리가 7자리인 경우(일반 유선 10자리)만 3-4로, 그 외(휴대폰 등)는 4-4로 나눔
+  const [middle, last] =
+    rest.length === 7 ? [rest.slice(0, 3), rest.slice(3)] : [rest.slice(0, 4), rest.slice(4)];
+
+  return [area, middle, last].filter(Boolean).join("-");
+}
+
+function handlePhoneInput(event: ChangeEvent<HTMLInputElement>) {
+  const digits = event.target.value.replace(/\D/g, "").slice(0, 11);
+  event.target.value = formatPhoneNumber(digits);
+}
 
 type Props = {
   open: boolean;
@@ -70,6 +90,10 @@ export function StudentFormModal({ open, onClose, student }: Props) {
             type="tel"
             name="parentPhone"
             required
+            inputMode="numeric"
+            pattern={PHONE_PATTERN}
+            title="전화번호 형식으로 입력해주세요. (예: 010-1234-5678)"
+            onChange={handlePhoneInput}
             defaultValue={student?.parentPhone ?? ""}
             placeholder="010-1234-5678"
             className={inputClass}
