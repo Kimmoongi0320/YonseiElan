@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf7f1;
+  --foreground: #10233f;
+
+  --color-navy-950: #0a1730;
+  --color-navy-900: #0f2447;
+  --color-navy-800: #163561;
+  --color-navy-700: #1f4479;
+  --color-navy-600: #2c5697;
+  --color-navy-500: #3d6bb0;
+  --color-navy-100: #e4eaf3;
+  --color-navy-50: #f1f4fa;
+
+  --color-gold-600: #a97a2c;
+  --color-gold-500: #c9973f;
+  --color-gold-400: #dab264;
+  --color-gold-100: #f3e6cc;
+  --color-gold-50: #f9f1e2;
+
+  --color-cream-100: #f5efe2;
+  --color-cream-50: #faf7f1;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-navy-950: var(--color-navy-950);
+  --color-navy-900: var(--color-navy-900);
+  --color-navy-800: var(--color-navy-800);
+  --color-navy-700: var(--color-navy-700);
+  --color-navy-600: var(--color-navy-600);
+  --color-navy-500: var(--color-navy-500);
+  --color-navy-100: var(--color-navy-100);
+  --color-navy-50: var(--color-navy-50);
+  --color-gold-600: var(--color-gold-600);
+  --color-gold-500: var(--color-gold-500);
+  --color-gold-400: var(--color-gold-400);
+  --color-gold-100: var(--color-gold-100);
+  --color-gold-50: var(--color-gold-50);
+  --color-cream-100: var(--color-cream-100);
+  --color-cream-50: var(--color-cream-50);
+  --font-sans: var(--font-pretendard);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), "Pretendard", -apple-system, sans-serif;
+  word-break: keep-all;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-8px);
+  }
+  40%,
+  80% {
+    transform: translateX(8px);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-shake {
+  animation: shake 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
