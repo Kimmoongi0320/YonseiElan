@@ -37,6 +37,12 @@ export function isTodayInKst(iso: string, nowMs: number): boolean {
   return kstDay(new Date(iso).getTime()) === kstDay(nowMs);
 }
 
+function startOfTodayKstIso(nowMs: number): string {
+  const kstDayIndex = Math.floor((nowMs + KST_OFFSET_MS) / 86_400_000);
+  const kstMidnightUtcMs = kstDayIndex * 86_400_000 - KST_OFFSET_MS;
+  return new Date(kstMidnightUtcMs).toISOString();
+}
+
 export async function findStudentsByPhone(phoneLast4: string): Promise<Student[]> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
@@ -79,11 +85,14 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   if (studentsError) throw studentsError;
   if (!students || students.length === 0) return [];
 
+  const now = Date.now();
+
   const studentIds = students.map((s) => s.id);
   const { data: records, error: recordsError } = await supabase
     .from("attendance_records")
     .select("student_id, check_in_at, check_out_at")
     .in("student_id", studentIds)
+    .gte("check_in_at", startOfTodayKstIso(now))
     .order("check_in_at", { ascending: false });
 
   if (recordsError) throw recordsError;
@@ -97,8 +106,6 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
       });
     }
   }
-
-  const now = Date.now();
 
   return students.map((s) => {
     const latest = latestByStudent.get(s.id);
