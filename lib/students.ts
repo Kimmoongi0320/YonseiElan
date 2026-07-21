@@ -75,51 +75,36 @@ export async function findStudentById(id: string): Promise<Student | null> {
 
 export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   const supabase = getSupabaseServerClient();
-
-  const { data: students, error: studentsError } = await supabase
-    .from("students")
-    .select("id, name, age, parent_phone, memo, class_days")
-    .eq("is_active", true)
-    .order("name", { ascending: true });
-
-  if (studentsError) throw studentsError;
-  if (!students || students.length === 0) return [];
-
   const now = Date.now();
 
-  const studentIds = students.map((s) => s.id);
-  const { data: records, error: recordsError } = await supabase
-    .from("attendance_records")
-    .select("student_id, check_in_at, check_out_at")
-    .in("student_id", studentIds)
-    .gte("check_in_at", startOfTodayKstIso(now))
-    .order("check_in_at", { ascending: false });
+  // Single round trip: fetch students with today's attendance records embedded,
+  // instead of a students query followed by a dependent attendance_records query.
+  const { data: students, error } = await supabase
+    .from("students")
+    .select(
+      "id, name, age, parent_phone, memo, class_days, attendance_records(check_in_at, check_out_at)"
+    )
+    .eq("is_active", true)
+    .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
+    .order("name", { ascending: true })
+    .order("check_in_at", { ascending: false, referencedTable: "attendance_records" });
 
-  if (recordsError) throw recordsError;
-
-  const latestByStudent = new Map<string, { checkInAt: string; checkOutAt: string | null }>();
-  for (const record of records ?? []) {
-    if (!latestByStudent.has(record.student_id)) {
-      latestByStudent.set(record.student_id, {
-        checkInAt: record.check_in_at,
-        checkOutAt: record.check_out_at,
-      });
-    }
-  }
+  if (error) throw error;
+  if (!students || students.length === 0) return [];
 
   return students.map((s) => {
-    const latest = latestByStudent.get(s.id);
+    const latest = s.attendance_records?.[0];
     let status: AttendanceStatus = "not_arrived";
     let checkInAt: number | null = null;
     let checkOutAt: number | null = null;
 
-    if (latest && isTodayInKst(latest.checkInAt, now)) {
-      checkInAt = new Date(latest.checkInAt).getTime();
-      if (!latest.checkOutAt) {
+    if (latest && isTodayInKst(latest.check_in_at, now)) {
+      checkInAt = new Date(latest.check_in_at).getTime();
+      if (!latest.check_out_at) {
         status = "checked_in";
       } else {
         status = "checked_out";
-        checkOutAt = new Date(latest.checkOutAt).getTime();
+        checkOutAt = new Date(latest.check_out_at).getTime();
       }
     }
 
