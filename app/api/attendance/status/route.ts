@@ -6,11 +6,18 @@ import { CHECK_OUT_WAIT_MS } from "@/lib/constants";
 export async function GET(request: Request) {
   const studentId = new URL(request.url).searchParams.get("studentId");
 
-  if (!studentId || !(await findStudentById(studentId))) {
+  if (!studentId) {
     return NextResponse.json({ checkedIn: false }, { status: 404 });
   }
 
-  const record = await getActiveRecord(studentId);
+  const [student, record] = await Promise.all([
+    findStudentById(studentId),
+    getActiveRecord(studentId),
+  ]);
+
+  if (!student) {
+    return NextResponse.json({ checkedIn: false }, { status: 404 });
+  }
   if (!record) {
     return NextResponse.json({ checkedIn: false });
   }
