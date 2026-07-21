@@ -16,6 +16,7 @@ import {
 } from "@/components/icons";
 import type { AdminStudent, AttendanceStatus } from "@/lib/students";
 import { DAY_KEYS, DAY_LABELS, getTodayDayKeyKst, sortDayKeys, type DayKey } from "@/lib/schedule";
+import { formatTime } from "@/lib/format";
 
 type StatusFilter = "all" | AttendanceStatus;
 type DayFilter = "all" | DayKey;
@@ -31,6 +32,22 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
 
 function telHref(phone: string) {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
+}
+
+function AttendanceTimes({
+  checkInAt,
+  checkOutAt,
+}: {
+  checkInAt: number | null;
+  checkOutAt: number | null;
+}) {
+  if (checkInAt == null) return <span className="text-navy-900/30">-</span>;
+  return (
+    <span className="flex flex-col text-xs text-navy-900/60">
+      <span>등원 {formatTime(checkInAt)}</span>
+      {checkOutAt != null && <span>하원 {formatTime(checkOutAt)}</span>}
+    </span>
+  );
 }
 
 export function AdminDashboard({ students }: { students: AdminStudent[] }) {
@@ -135,7 +152,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
             className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gold-500 px-4 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
           >
             <ArchiveIcon className="h-4 w-4 shrink-0" />
-            <span className="truncate">전체 퇴원 처리{selected.size > 0 ? ` (${selected.size})` : ""}</span>
+            <span className="truncate">전체 하원 처리{selected.size > 0 ? ` (${selected.size})` : ""}</span>
           </button>
           <button
             type="button"
@@ -247,7 +264,10 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   </span>
                 </span>
               </label>
-              <StatusBadge status={s.status} />
+              <span className="flex flex-col items-end gap-1">
+                <StatusBadge status={s.status} />
+                <AttendanceTimes checkInAt={s.checkInAt} checkOutAt={s.checkOutAt} />
+              </span>
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2 border-t border-navy-900/5 pt-3">
@@ -297,7 +317,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
       </div>
 
       <div className="hidden overflow-x-auto rounded-[1.75rem] bg-white shadow-[0_20px_60px_-30px_rgba(10,23,48,0.25)] sm:block">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead>
             <tr className="border-b border-navy-900/5 text-xs font-medium uppercase tracking-wide text-navy-900/40">
               <th className="w-12 px-5 py-4">
@@ -315,6 +335,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
               <th className="px-3 py-4">요일</th>
               <th className="px-3 py-4">부모님 전화번호</th>
               <th className="px-3 py-4">상태</th>
+              <th className="px-3 py-4">시간</th>
               <th className="w-36 px-8 py-4 text-right">관리</th>
             </tr>
           </thead>
@@ -355,6 +376,9 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   <StatusBadge status={s.status} />
                 </td>
                 <td className="px-3 py-4">
+                  <AttendanceTimes checkInAt={s.checkInAt} checkOutAt={s.checkOutAt} />
+                </td>
+                <td className="px-3 py-4">
                   <div className="flex items-center justify-end gap-1">
                     {s.status === "checked_in" && (
                       <button
@@ -388,7 +412,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-sm text-navy-900/40">
+                <td colSpan={8} className="px-5 py-10 text-center text-sm text-navy-900/40">
                   조건에 맞는 학생이 없습니다.
                 </td>
               </tr>
