@@ -220,7 +220,10 @@ export function AttendanceFlow() {
             </div>
             <button
               type="button"
-              onClick={() => setPhase("phone")}
+              onClick={() => {
+                setPhone("");
+                setPhase("phone");
+              }}
               className="text-sm text-navy-900/50 hover:text-navy-900"
             >
               다시 입력
@@ -235,7 +238,10 @@ export function AttendanceFlow() {
             <p className="text-sm text-navy-900/50">전화번호를 다시 확인해주세요</p>
             <button
               type="button"
-              onClick={() => setPhase("phone")}
+              onClick={() => {
+                setPhone("");
+                setPhase("phone");
+              }}
               className="mt-2 rounded-full bg-navy-900/5 px-5 py-2.5 text-sm font-medium text-navy-900 hover:bg-navy-900/10"
             >
               다시 입력
