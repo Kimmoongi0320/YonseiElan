@@ -32,7 +32,7 @@ export type StudentInput = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-function isTodayInKst(iso: string, nowMs: number): boolean {
+export function isTodayInKst(iso: string, nowMs: number): boolean {
   const kstDay = (ms: number) => Math.floor((ms + KST_OFFSET_MS) / 86_400_000);
   return kstDay(new Date(iso).getTime()) === kstDay(nowMs);
 }

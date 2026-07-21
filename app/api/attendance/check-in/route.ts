@@ -11,7 +11,7 @@ export async function POST(request: Request) {
 
   const result = await checkIn(studentId);
   if (!result.ok) {
-    return NextResponse.json({ ok: false, reason: result.reason }, { status: 409 });
+    return NextResponse.json(result, { status: 409 });
   }
 
   return NextResponse.json({ ok: true, checkInAt: result.record.checkInAt });

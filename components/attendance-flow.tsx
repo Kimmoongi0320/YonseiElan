@@ -5,7 +5,14 @@ import { Modal } from "./modal";
 import { Keypad } from "./keypad";
 import { CheckCircleIcon, CheckInIcon, CheckOutIcon, ClockIcon, UserIcon } from "./icons";
 import { formatRemainingMinutes, formatTime } from "@/lib/format";
-import { CHECK_OUT_WAIT_MS } from "@/lib/constants";
+import { CHECK_OUT_WAIT_MS, CHECKIN_CUTOFF_HOUR_KST } from "@/lib/constants";
+
+// UX-only guard so the button reflects operating hours; the actual cutoff is enforced
+// server-side in lib/attendance.ts checkIn(), which is the source of truth.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+function isAfterCheckinCutoff(nowMs: number): boolean {
+  return new Date(nowMs + KST_OFFSET_MS).getUTCHours() >= CHECKIN_CUTOFF_HOUR_KST;
+}
 
 type Mode = "in" | "out";
 type Phase = "phone" | "loading" | "names" | "empty" | "confirm" | "success";
@@ -107,6 +114,8 @@ export function AttendanceFlow() {
         const data = await res.json();
         if (data.reason === "already-checked-in") {
           setStatus({ checkedIn: true, checkInAt: status?.checkInAt ?? Date.now() });
+        } else if (data.reason === "after-hours") {
+          setNow(Date.now());
         }
       }
     } finally {
@@ -242,6 +251,8 @@ export function AttendanceFlow() {
             ) : mode === "in" ? (
               status?.checkedIn ? (
                 <p className="text-sm text-navy-900/60">이미 등원 처리된 학생입니다</p>
+              ) : isAfterCheckinCutoff(now) ? (
+                <p className="text-sm text-navy-900/60">운영 시간이 종료되어 등원 처리가 불가능합니다</p>
               ) : (
                 <button
                   type="button"
