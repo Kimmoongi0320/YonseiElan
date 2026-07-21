@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { BackspaceIcon, ChevronLeftIcon, LockIcon } from "@/components/icons";
+import { BackspaceIcon, ChevronLeftIcon, LockIcon, SpinnerIcon } from "@/components/icons";
 
 const PIN_LENGTH = 4;
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "backspace"];
@@ -57,10 +57,16 @@ export default function AdminAuthPage() {
     <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center gap-8 bg-cream-50 px-6">
       <div className="flex flex-col items-center gap-3 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-navy-900/5 text-navy-900">
-          <LockIcon className="h-5 w-5" />
+          {pending ? (
+            <SpinnerIcon className="h-5 w-5 animate-spin" />
+          ) : (
+            <LockIcon className="h-5 w-5" />
+          )}
         </span>
         <h1 className="text-xl font-bold text-navy-900">관리자 인증</h1>
-        <p className="text-sm text-navy-900/50">4자리 비밀번호를 입력하세요</p>
+        <p className="text-sm text-navy-900/50">
+          {pending ? "로그인 중..." : "4자리 비밀번호를 입력하세요"}
+        </p>
       </div>
 
       <div className={`flex items-center gap-4 ${error ? "animate-shake" : ""}`}>
