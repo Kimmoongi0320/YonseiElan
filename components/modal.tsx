@@ -17,6 +17,35 @@ export function Modal({ open, onClose, children }: ModalProps) {
   useEffect(() => {
     if (!open) return;
 
+    const { body } = document;
+    const scrollY = window.scrollY;
+    const previousStyle = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      overflow: body.style.overflow,
+    };
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.overflow = "hidden";
+
+    return () => {
+      body.style.position = previousStyle.position;
+      body.style.top = previousStyle.top;
+      body.style.left = previousStyle.left;
+      body.style.right = previousStyle.right;
+      body.style.overflow = previousStyle.overflow;
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
     window.history.pushState({ modalOpen: true }, "");
     pushedHistoryRef.current = true;
 
