@@ -268,8 +268,12 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                     )}
 
                     {info.status === "absent" && info.makeupDate && (
-                      <div className="rounded bg-amber-100 px-1 py-0.5 text-center text-[10px] font-medium text-amber-700">
-                        {formatMonthDayLabel(info.makeupDate)} 보강
+                      <div
+                        className={`rounded px-1 py-0.5 text-center text-[10px] font-medium ${
+                          info.makeupCompleted ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {formatMonthDayLabel(info.makeupDate)} {info.makeupCompleted ? "보강완료" : "보강"}
                         {isRegularClassDay(info.makeupDate, student.classDays) && " · 정규"}
                       </div>
                     )}
@@ -341,6 +345,12 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                         onBlur={(e) => handleMakeupDateBlur(visibleSelectedDate, e.target.value || null)}
                         className="w-full max-w-[200px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
                       />
+                      {selectedInfo.makeupDate && (
+                        <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
+                          {formatMonthDayLabel(selectedInfo.makeupDate)}로{" "}
+                          {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
+                        </span>
+                      )}
                       {selectedInfo.makeupDate && isRegularClassDay(selectedInfo.makeupDate, student.classDays) && (
                         <span className="font-normal text-amber-600">
                           ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥

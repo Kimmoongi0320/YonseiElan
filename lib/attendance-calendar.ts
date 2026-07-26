@@ -11,6 +11,9 @@ export type DayAttendanceInfo = {
   makeupDate: string | null;
   // Set when this day IS the scheduled makeup date for an absence on another date.
   makeupForDate: string | null;
+  // True once the relevant makeup date has an actual check-in — read on
+  // whichever side (the absence day via makeupDate, or the target day via
+  // makeupForDate) is currently being displayed.
   makeupCompleted: boolean;
 };
 
@@ -81,6 +84,38 @@ export async function getStudentMonthAttendance(
   if (recordsResult.error) throw recordsResult.error;
   if (overridesResult.error) throw overridesResult.error;
 
+  const overrides = overridesResult.data ?? [];
+
+  // Whether a makeup was completed depends on a check-in on the makeup date,
+  // which can fall in a month other than the one currently displayed (either
+  // the absence's month or the makeup's own month). Resolve it directly
+  // instead of relying on the month-scoped attendance_records fetch above.
+  const distinctMakeupDates = Array.from(
+    new Set(overrides.map((o) => o.makeup_date).filter((d): d is string => d != null))
+  );
+  const completedMakeupDates = new Set<string>();
+  if (distinctMakeupDates.length > 0) {
+    const orFilter = distinctMakeupDates
+      .map((dateStr) => {
+        const { year, month: m, day } = parseDateStr(dateStr);
+        const dayStart = kstMidnightIso(year, m, day);
+        const dayEnd = kstMidnightIso(year, m, day + 1);
+        return `and(check_in_at.gte.${dayStart},check_in_at.lt.${dayEnd})`;
+      })
+      .join(",");
+
+    const { data, error } = await supabase
+      .from("attendance_records")
+      .select("check_in_at")
+      .eq("student_id", studentId)
+      .or(orFilter);
+
+    if (error) throw error;
+    for (const record of data ?? []) {
+      completedMakeupDates.add(kstDateString(new Date(record.check_in_at).getTime()));
+    }
+  }
+
   const result: Record<string, DayAttendanceInfo> = {};
   const ensure = (date: string): DayAttendanceInfo => {
     if (!result[date]) result[date] = emptyDayInfo();
@@ -95,21 +130,29 @@ export async function getStudentMonthAttendance(
     entry.checkOutAt = record.check_out_at ? new Date(record.check_out_at).getTime() : null;
   }
 
-  for (const override of overridesResult.data ?? []) {
+  for (const override of overrides) {
     if (override.date >= startDate && override.date < endDate) {
       const entry = ensure(override.date);
       entry.status = override.status as DayAttendanceStatus;
       entry.makeupDate = override.status === "absent" ? override.makeup_date : null;
+      if (entry.makeupDate) {
+        entry.makeupCompleted = completedMakeupDates.has(entry.makeupDate);
+      }
     }
 
     if (override.makeup_date && override.makeup_date >= startDate && override.makeup_date < endDate) {
       const entry = ensure(override.makeup_date);
       entry.makeupForDate = override.date;
-      entry.makeupCompleted = entry.checkInAt != null;
+      entry.makeupCompleted = completedMakeupDates.has(override.makeup_date);
     }
   }
 
   return result;
+}
+
+function parseDateStr(dateStr: string): { year: number; month: number; day: number } {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return { year, month, day };
 }
 
 export async function setAttendanceOverride(
