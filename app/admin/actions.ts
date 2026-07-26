@@ -5,6 +5,13 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createStudent, deleteStudent, findStudentById, updateStudent } from "@/lib/students";
 import { adminCheckOut } from "@/lib/attendance";
+import {
+  clearAttendanceOverride,
+  getStudentMonthAttendance,
+  setAttendanceMakeupDate,
+  setAttendanceOverride,
+  type DayAttendanceInfo,
+} from "@/lib/attendance-calendar";
 import { NOTIFICATION_TEMPLATES } from "@/lib/notifications";
 import { isDayKey, type DayKey } from "@/lib/schedule";
 import { updateAdminPin, verifyAdminPin } from "@/lib/admin-settings";
@@ -12,6 +19,7 @@ import { updateAdminPin, verifyAdminPin } from "@/lib/admin-settings";
 const SESSION_COOKIE = "elan_admin_session";
 const PHONE_RE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
 const PIN_RE = /^\d{4}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 async function requireAdminSession() {
   const cookieStore = await cookies();
@@ -85,6 +93,58 @@ export async function adminCheckOutAction(studentId: string): Promise<{ ok: bool
   const result = await adminCheckOut(studentId);
   revalidatePath("/admin/dashboard");
   return { ok: result.ok };
+}
+
+export async function getStudentAttendanceMonthAction(
+  studentId: string,
+  year: number,
+  month: number
+): Promise<Record<string, DayAttendanceInfo>> {
+  await requireAdminSession();
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Invalid year/month");
+  }
+
+  return getStudentMonthAttendance(studentId, year, month);
+}
+
+export async function setAttendanceStatusAction(
+  studentId: string,
+  date: string,
+  status: "present" | "absent" | "auto"
+): Promise<void> {
+  await requireAdminSession();
+
+  if (!DATE_RE.test(date)) {
+    throw new Error("Invalid date");
+  }
+
+  if (status === "auto") {
+    await clearAttendanceOverride(studentId, date);
+  } else {
+    await setAttendanceOverride(studentId, date, status);
+  }
+
+  revalidatePath("/admin/dashboard");
+}
+
+export async function setAttendanceMakeupDateAction(
+  studentId: string,
+  date: string,
+  makeupDate: string | null
+): Promise<void> {
+  await requireAdminSession();
+
+  if (!DATE_RE.test(date)) {
+    throw new Error("Invalid date");
+  }
+  if (makeupDate !== null && !DATE_RE.test(makeupDate)) {
+    throw new Error("Invalid makeup date");
+  }
+
+  await setAttendanceMakeupDate(studentId, date, makeupDate);
+  revalidatePath("/admin/dashboard");
 }
 
 export type NotificationFormState = { error: string } | null;

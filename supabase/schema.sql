@@ -62,6 +62,32 @@ create index if not exists attendance_student_id_idx on attendance_records (stud
 create index if not exists attendance_check_in_at_idx on attendance_records (check_in_at desc);
 
 -- ---------------------------------------------------------------------------
+-- attendance_overrides — admin-set present/absent status for a specific
+-- calendar date, shown on the admin dashboard's per-student calendar. Takes
+-- precedence over the status derived from attendance_records, so an admin
+-- can mark a student present without a kiosk check-in, or absent despite one.
+-- ---------------------------------------------------------------------------
+create table if not exists attendance_overrides (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references students (id) on delete cascade,
+  date date not null,
+  status text not null check (status in ('present', 'absent')),
+  makeup_date date,
+  created_at timestamptz not null default now(),
+
+  unique (student_id, date)
+);
+
+-- Migration for pre-existing databases created before makeup_date was added.
+alter table attendance_overrides add column if not exists makeup_date date;
+
+comment on column attendance_overrides.makeup_date is
+  '결석(status=absent)에 대한 보강 예정 날짜. 그 날짜에 학생이 실제로 등원하면 보강완료로 표시됨.';
+
+create index if not exists attendance_overrides_student_id_idx
+  on attendance_overrides (student_id);
+
+-- ---------------------------------------------------------------------------
 -- Auto check-out at 22:00 KST — students who checked in but were never
 -- checked out get closed out automatically at the academy's closing time.
 -- pg_cron runs in UTC, and KST has no DST (always UTC+9), so 22:00 KST is a
@@ -106,6 +132,7 @@ create table if not exists app_settings (
 -- directly from the browser — cannot read or write these tables at all.
 alter table students enable row level security;
 alter table attendance_records enable row level security;
+alter table attendance_overrides enable row level security;
 alter table app_settings enable row level security;
 
 -- ---------------------------------------------------------------------------

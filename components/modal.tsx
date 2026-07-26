@@ -7,12 +7,14 @@ type ModalProps = {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  maxWidthClassName?: string;
 };
 
-export function Modal({ open, onClose, children }: ModalProps) {
+export function Modal({ open, onClose, children, maxWidthClassName = "max-w-sm" }: ModalProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const pushedHistoryRef = useRef(false);
+  const ignoreNextPopRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +52,15 @@ export function Modal({ open, onClose, children }: ModalProps) {
     pushedHistoryRef.current = true;
 
     const handlePopState = () => {
+      // Dev-mode Strict Mode double-invokes this effect (mount, cleanup, mount),
+      // and the cleanup's corrective history.back() below resolves asynchronously
+      // as its own popstate event. Without this guard, that self-triggered event
+      // lands on the second mount's listener and closes the modal right after it
+      // opens. A real back-button press never sets this flag, so it still closes.
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
       pushedHistoryRef.current = false;
       onCloseRef.current();
     };
@@ -59,6 +70,7 @@ export function Modal({ open, onClose, children }: ModalProps) {
       window.removeEventListener("popstate", handlePopState);
       if (pushedHistoryRef.current) {
         pushedHistoryRef.current = false;
+        ignoreNextPopRef.current = true;
         window.history.back();
       }
     };
@@ -71,7 +83,7 @@ export function Modal({ open, onClose, children }: ModalProps) {
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-full w-full max-w-sm flex-col overflow-y-auto rounded-[2rem] bg-white p-6 shadow-[0_30px_80px_-20px_rgba(10,23,48,0.35)] sm:p-8"
+        className={`relative flex max-h-full w-full ${maxWidthClassName} flex-col overflow-y-auto rounded-[2rem] bg-white p-6 shadow-[0_30px_80px_-20px_rgba(10,23,48,0.35)] sm:p-8`}
       >
         <button
           type="button"

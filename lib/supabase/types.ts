@@ -62,6 +62,37 @@ export type Database = {
           },
         ];
       };
+      attendance_overrides: {
+        Row: {
+          id: string;
+          student_id: string;
+          date: string;
+          status: string;
+          makeup_date: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          date: string;
+          status: string;
+          makeup_date?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+          makeup_date?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "attendance_overrides_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       app_settings: {
         Row: {
           key: string;

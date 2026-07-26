@@ -5,8 +5,10 @@ import { adminCheckOutAction, deleteStudentAction } from "@/app/admin/actions";
 import { StatusBadge } from "./status-badge";
 import { StudentFormModal } from "./student-form-modal";
 import { ConfirmModal } from "./confirm-modal";
+import { AttendanceCalendarModal } from "./attendance-calendar-modal";
 import {
   ArchiveIcon,
+  CalendarIcon,
   CheckOutIcon,
   PencilIcon,
   PhoneIcon,
@@ -63,6 +65,11 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
   }>({ open: false, student: null, nonce: 0 });
   const [confirmTarget, setConfirmTarget] = useState<PendingConfirm | null>(null);
   const [confirmPending, setConfirmPending] = useState(false);
+  const [calendarModal, setCalendarModal] = useState<{
+    open: boolean;
+    student: AdminStudent | null;
+    nonce: number;
+  }>({ open: false, student: null, nonce: 0 });
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -109,6 +116,10 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
   const openEdit = (student: AdminStudent) =>
     setFormModal((s) => ({ open: true, student, nonce: s.nonce + 1 }));
   const closeForm = () => setFormModal((s) => ({ ...s, open: false }));
+
+  const openCalendar = (student: AdminStudent) =>
+    setCalendarModal((s) => ({ open: true, student, nonce: s.nonce + 1 }));
+  const closeCalendar = () => setCalendarModal((s) => ({ ...s, open: false }));
 
   const handleBulkWithdraw = () => {
     // TODO: implement bulk withdrawal for selected students (selected: Set<string>),
@@ -291,6 +302,14 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                 )}
                 <button
                   type="button"
+                  onClick={() => openCalendar(s)}
+                  aria-label={`${s.name} 출석 달력`}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => openEdit(s)}
                   aria-label={`${s.name} 정보 수정`}
                   className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
@@ -392,6 +411,14 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                     )}
                     <button
                       type="button"
+                      onClick={() => openCalendar(s)}
+                      aria-label={`${s.name} 출석 달력`}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
+                    >
+                      <CalendarIcon className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openEdit(s)}
                       aria-label={`${s.name} 정보 수정`}
                       className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
@@ -426,6 +453,13 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
         open={formModal.open}
         onClose={closeForm}
         student={formModal.student}
+      />
+
+      <AttendanceCalendarModal
+        key={`calendar-${calendarModal.nonce}`}
+        open={calendarModal.open}
+        onClose={closeCalendar}
+        student={calendarModal.student}
       />
 
       <ConfirmModal
