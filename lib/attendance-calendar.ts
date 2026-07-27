@@ -13,10 +13,19 @@ export type DayAttendanceInfo = {
   // Non-empty when this day IS the scheduled makeup date for one or more
   // absences on other dates (multiple absences can share one makeup day).
   makeupForDates: string[];
-  // True once the relevant makeup date has an actual check-in — read on
-  // whichever side (the absence day via makeupDate, or the target day via
-  // makeupForDates) is currently being displayed.
+  // True once THIS day's own scheduled makeup (at makeupDate) has an actual
+  // check-in or present override. Only meaningful when makeupDate is set —
+  // read when displaying this day in its role as the absence.
   makeupCompleted: boolean;
+  // True once THIS day itself has an actual check-in or present override.
+  // Only meaningful when makeupForDates is non-empty — read when displaying
+  // this day in its role as the makeup destination for other absences.
+  // Kept separate from makeupCompleted because a single day can be both an
+  // absence with its own pending makeup AND the makeup target for another
+  // absence at the same time, and those two roles can have different
+  // answers (e.g. this day's own makeup is done, but this day itself, being
+  // absent, was never attended).
+  targetFulfilled: boolean;
   // The student's class_days as of when this absence/makeup override was
   // last created or edited. Null for rows never touched since this column
   // was added, or for days with no override at all — callers should fall
@@ -53,6 +62,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     makeupDate: null,
     makeupForDates: [],
     makeupCompleted: false,
+    targetFulfilled: false,
     classDaysSnapshot: null,
   };
 }
@@ -160,7 +170,7 @@ export async function getStudentMonthAttendance(
     if (override.makeup_date && override.makeup_date >= startDate && override.makeup_date < endDate) {
       const entry = ensure(override.makeup_date);
       entry.makeupForDates.push(override.date);
-      entry.makeupCompleted = isMakeupCompleted(override.makeup_date);
+      entry.targetFulfilled = isMakeupCompleted(override.makeup_date);
       entry.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
     }
   }
@@ -175,19 +185,42 @@ function parseDateStr(dateStr: string): { year: number; month: number; day: numb
   return { year, month, day };
 }
 
-// Returns a { date: info } map scoped to just the given dates, instead of a
-// whole month. Used to hand back the effect of a single edit (the day that
-// changed plus any makeup-linked day) without re-querying the entire month.
+// Returns a { date: info } map scoped to the given seed dates, PLUS every
+// date reachable from them through the makeup-date graph. Used to hand back
+// the effect of a single edit without re-querying the whole month.
+//
+// Fetches every override row for this student (unbounded — same trivial-cost
+// pattern getStudentMonthAttendance uses) rather than walking the makeup
+// chain one hop at a time from the seed dates. A hop-limited lookup used to
+// live here, but it broke down for chains longer than one link (e.g. day A's
+// makeup is day B, and day B's own makeup is day C): editing day C would
+// refresh day B correctly, but couldn't discover day A, so day B's returned
+// entry — missing the link back to A — would overwrite the client's correct
+// cached copy and make A's pending-makeup indicator vanish. Resolving the
+// full graph up front avoids that class of bug entirely.
 export async function getDatesAttendanceInfo(
   studentId: string,
   dates: string[]
 ): Promise<Record<string, DayAttendanceInfo>> {
-  const uniqueDates = Array.from(new Set(dates)).filter((d) => DATE_RE.test(d));
-  if (uniqueDates.length === 0) return {};
+  const seedDates = Array.from(new Set(dates)).filter((d) => DATE_RE.test(d));
+  if (seedDates.length === 0) return {};
 
   const supabase = getSupabaseServerClient();
 
-  const recordsOrFilter = uniqueDates
+  const { data: overridesData, error: overridesError } = await supabase
+    .from("attendance_overrides")
+    .select("date, status, makeup_date, class_days_snapshot")
+    .eq("student_id", studentId);
+  if (overridesError) throw overridesError;
+  const overrides = overridesData ?? [];
+
+  const relevantDates = new Set(seedDates);
+  for (const o of overrides) {
+    relevantDates.add(o.date);
+    if (o.makeup_date) relevantDates.add(o.makeup_date);
+  }
+
+  const recordsOrFilter = Array.from(relevantDates)
     .map((dateStr) => {
       const { year, month, day } = parseDateStr(dateStr);
       const dayStart = kstMidnightIso(year, month, day);
@@ -196,30 +229,12 @@ export async function getDatesAttendanceInfo(
     })
     .join(",");
 
-  const [recordsResult, ownOverridesResult, linkedOverridesResult] = await Promise.all([
-    supabase
-      .from("attendance_records")
-      .select("check_in_at, check_out_at")
-      .eq("student_id", studentId)
-      .or(recordsOrFilter),
-    supabase
-      .from("attendance_overrides")
-      .select("date, status, makeup_date, class_days_snapshot")
-      .eq("student_id", studentId)
-      .in("date", uniqueDates),
-    // A date passed in can be the makeup side of an absence whose own date
-    // isn't in `uniqueDates` (e.g. the admin marks the makeup day present
-    // directly) — this pulls in that absence row so it gets refreshed too.
-    supabase
-      .from("attendance_overrides")
-      .select("date, status, makeup_date, class_days_snapshot")
-      .eq("student_id", studentId)
-      .in("makeup_date", uniqueDates),
-  ]);
-
-  if (recordsResult.error) throw recordsResult.error;
-  if (ownOverridesResult.error) throw ownOverridesResult.error;
-  if (linkedOverridesResult.error) throw linkedOverridesResult.error;
+  const { data: recordsData, error: recordsError } = await supabase
+    .from("attendance_records")
+    .select("check_in_at, check_out_at")
+    .eq("student_id", studentId)
+    .or(recordsOrFilter);
+  if (recordsError) throw recordsError;
 
   const result: Record<string, DayAttendanceInfo> = {};
   const ensure = (date: string): DayAttendanceInfo => {
@@ -227,10 +242,10 @@ export async function getDatesAttendanceInfo(
     return result[date];
   };
 
-  for (const date of uniqueDates) ensure(date);
+  for (const date of relevantDates) ensure(date);
 
   const checkInDates = new Set<string>();
-  for (const record of recordsResult.data ?? []) {
+  for (const record of recordsData ?? []) {
     const date = kstDateString(new Date(record.check_in_at).getTime());
     checkInDates.add(date);
     const entry = ensure(date);
@@ -238,13 +253,6 @@ export async function getDatesAttendanceInfo(
     entry.checkInAt = new Date(record.check_in_at).getTime();
     entry.checkOutAt = record.check_out_at ? new Date(record.check_out_at).getTime() : null;
   }
-
-  // The same override row can surface from both queries above (its own date
-  // and its makeup date can both land in `uniqueDates`) — dedupe by date.
-  const overridesByDate = new Map(
-    [...(ownOverridesResult.data ?? []), ...(linkedOverridesResult.data ?? [])].map((o) => [o.date, o])
-  );
-  const overrides = Array.from(overridesByDate.values());
 
   // A makeup also counts as completed when the admin manually marked that day
   // present via an override, even without an actual check-in record.
@@ -263,7 +271,7 @@ export async function getDatesAttendanceInfo(
     if (override.makeup_date) {
       const target = ensure(override.makeup_date);
       target.makeupForDates.push(override.date);
-      target.makeupCompleted = isMakeupCompleted(override.makeup_date);
+      target.targetFulfilled = isMakeupCompleted(override.makeup_date);
       target.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
     }
   }
@@ -281,6 +289,7 @@ export async function setAttendanceOverride(
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
+  if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
 
   const supabase = getSupabaseServerClient();
 
@@ -323,6 +332,7 @@ export async function setAttendanceMakeupDate(
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
+  if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
 
   const supabase = getSupabaseServerClient();
 
