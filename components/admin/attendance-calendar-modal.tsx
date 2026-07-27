@@ -345,54 +345,54 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                 )}
               </div>
 
-              {selectedFuture ? (
-                <p className="text-sm text-navy-900/40">아직 지나지 않은 날짜예요. 당일 이후에 기록할 수 있어요.</p>
-              ) : (
-                <>
-                  <div className="flex gap-2">
-                    {STATUS_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        disabled={selectedSaving}
-                        onClick={() => handleStatusChange(visibleSelectedDate, opt.value)}
-                        className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                          selectedInfo.status === opt.value
-                            ? opt.activeClassName
-                            : "bg-white text-navy-900/60 hover:bg-navy-900/5"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
+              {selectedFuture && (
+                <p className="text-xs text-navy-900/40">아직 지나지 않은 날짜예요. 결석과 보강 예약만 등록할 수 있어요.</p>
+              )}
 
-                  {selectedInfo.status === "absent" && (
-                    <label className="flex flex-col gap-1.5 text-xs font-medium text-navy-900/50">
-                      보강 날짜
-                      <input
-                        key={visibleSelectedDate}
-                        type="date"
-                        defaultValue={selectedInfo.makeupDate ?? ""}
-                        disabled={selectedSaving}
-                        onBlur={(e) => handleMakeupDateBlur(visibleSelectedDate, e.target.value || null)}
-                        className="w-full max-w-[200px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
-                      />
-                      {selectedInfo.makeupDate && (
-                        <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
-                          {formatMonthDayLabel(selectedInfo.makeupDate)}로{" "}
-                          {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
-                        </span>
-                      )}
-                      {selectedInfo.makeupDate && isRegularClassDay(selectedInfo.makeupDate, student.classDays) && (
-                        <span className="font-normal text-amber-600">
-                          ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
-                          평소처럼 등원한 것인지 보강을 위해 온 것인지 구분되지 않으니 참고해주세요.
-                        </span>
-                      )}
-                    </label>
+              <div className="flex gap-2">
+                {(selectedFuture ? STATUS_OPTIONS.filter((opt) => opt.value !== "present") : STATUS_OPTIONS).map(
+                  (opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={selectedSaving}
+                      onClick={() => handleStatusChange(visibleSelectedDate, opt.value)}
+                      className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selectedInfo.status === opt.value
+                          ? opt.activeClassName
+                          : "bg-white text-navy-900/60 hover:bg-navy-900/5"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ),
+                )}
+              </div>
+
+              {selectedInfo.status === "absent" && (
+                <label className="flex flex-col gap-1.5 text-xs font-medium text-navy-900/50">
+                  보강 날짜
+                  <input
+                    key={visibleSelectedDate}
+                    type="date"
+                    defaultValue={selectedInfo.makeupDate ?? ""}
+                    disabled={selectedSaving}
+                    onBlur={(e) => handleMakeupDateBlur(visibleSelectedDate, e.target.value || null)}
+                    className="w-full max-w-[200px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  {selectedInfo.makeupDate && (
+                    <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
+                      {formatMonthDayLabel(selectedInfo.makeupDate)}로{" "}
+                      {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
+                    </span>
                   )}
-                </>
+                  {selectedInfo.makeupDate && isRegularClassDay(selectedInfo.makeupDate, student.classDays) && (
+                    <span className="font-normal text-amber-600">
+                      ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
+                      평소처럼 등원한 것인지 보강을 위해 온 것인지 구분되지 않으니 참고해주세요.
+                    </span>
+                  )}
+                </label>
               )}
 
               {selectedInfo.makeupForDate && (
