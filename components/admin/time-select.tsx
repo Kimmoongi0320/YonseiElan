@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOURS = Array.from({ length: 14 }, (_, i) => i + 8); // 08~21시
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 function pad2(n: number): string {

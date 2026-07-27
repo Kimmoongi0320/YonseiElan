@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { Modal } from "@/components/modal";
 import { getScheduleMonthOverridesAction } from "@/app/admin/actions";
 import type { MonthOverrideRow } from "@/lib/schedule-calendar";
@@ -451,34 +451,6 @@ export function ScheduleCalendar({ students }: Props) {
                       </div>
                     </div>
 
-                    {detailEntries && (
-                      <div className="flex flex-col gap-2 rounded-xl border border-navy-900/10 bg-navy-50/60 p-3">
-                        {detailEntries.map((entry, i) => (
-                          <div
-                            key={`${entry.studentId}-${entry.kind}-detail-${i}`}
-                            className="flex items-center justify-between gap-2 text-sm"
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span className="truncate font-semibold text-navy-900">{entry.name}</span>
-                              {entry.kind === "makeup" && (
-                                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                                  보강{entry.originDate ? ` (${formatMonthDayLabel(entry.originDate)} 결석)` : ""}
-                                </span>
-                              )}
-                              {entry.isAbsent && (
-                                <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-600">
-                                  결석
-                                </span>
-                              )}
-                            </span>
-                            <span className="shrink-0 text-navy-900/50">
-                              {entry.time ? formatTimeRange(entry.time) : "시간 미정"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
                     {timetable.untimed.length > 0 && (
                       <div className="flex flex-col gap-1.5">
                         <p className="text-xs font-medium text-navy-900/40">시간 미정</p>
@@ -513,6 +485,49 @@ export function ScheduleCalendar({ students }: Props) {
             );
           })()}
       </Modal>
+
+      {detailEntries && (
+        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
+          <div className="flex w-full max-w-lg flex-col gap-2 rounded-t-2xl border border-navy-900/10 bg-white p-4 shadow-[0_-15px_40px_-20px_rgba(10,23,48,0.35)]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-navy-900/40">선택한 학생</span>
+              <button
+                type="button"
+                onClick={() => setDetailEntries(null)}
+                aria-label="닫기"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-navy-900/40 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
+              {detailEntries.map((entry, i) => (
+                <div
+                  key={`${entry.studentId}-${entry.kind}-detail-${i}`}
+                  className="flex items-center justify-between gap-2 rounded-xl bg-navy-50/60 px-3 py-2 text-sm"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-semibold text-navy-900">{entry.name}</span>
+                    {entry.kind === "makeup" && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                        보강{entry.originDate ? ` (${formatMonthDayLabel(entry.originDate)} 결석)` : ""}
+                      </span>
+                    )}
+                    {entry.isAbsent && (
+                      <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-600">
+                        결석
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-navy-900/50">
+                    {entry.time ? formatTimeRange(entry.time) : "시간 미정"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
