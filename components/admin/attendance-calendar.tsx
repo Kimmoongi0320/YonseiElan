@@ -94,6 +94,7 @@ type Props = {
 
 export function AttendanceCalendar({ student }: Props) {
   const today = todayKst();
+  const todayStr = ymd(today.year, today.month, today.day);
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState(today.month);
   const [data, setData] = useState<Record<string, DayAttendanceInfo>>({});
@@ -140,6 +141,17 @@ export function AttendanceCalendar({ student }: Props) {
     }
     return d.day > today.day;
   };
+
+  // A "정규" (regular class day) warning only makes sense against the
+  // schedule actually in force on that date. For a date that's already
+  // happened, that's the class_days_snapshot recorded when the override was
+  // last saved — the schedule can have changed since, but the snapshot is
+  // what created whatever ambiguity is in that day's attendance record. For
+  // a date that hasn't happened yet, the snapshot may be stale (the
+  // student's regular days can still change before it arrives), so use the
+  // live, current schedule instead.
+  const classDaysAsOf = (dateStr: string, snapshot: DayKey[] | null): DayKey[] =>
+    dateStr < todayStr ? (snapshot ?? student.classDays) : student.classDays;
 
   const withSaving = async (dateStr: string, task: () => Promise<Record<string, DayAttendanceInfo>>) => {
     setSavingDates((prev) => new Set(prev).add(dateStr));
@@ -252,8 +264,6 @@ export function AttendanceCalendar({ student }: Props) {
               const isClassDay = isRegularClassDay(dateStr, student.classDays);
               const isPaymentDay = student.paymentDay === day;
 
-              const classDaysSnapshot = info.classDaysSnapshot ?? student.classDays;
-
               const makeupLine =
                 info.status === "absent" && info.makeupDate
                   ? { text: `보강 ${formatShortMonthDay(info.makeupDate)}`, done: info.makeupCompleted }
@@ -261,7 +271,7 @@ export function AttendanceCalendar({ student }: Props) {
                     ? {
                         text: `${info.targetFulfilled ? "보강완료" : "보강예정"}${
                           info.makeupForDates.length > 1 ? ` ×${info.makeupForDates.length}` : ""
-                        }${isRegularClassDay(dateStr, classDaysSnapshot) ? " · 정규" : ""}`,
+                        }${isRegularClassDay(dateStr, classDaysAsOf(dateStr, info.classDaysSnapshot)) ? " · 정규" : ""}`,
                         done: info.targetFulfilled,
                       }
                     : null;
@@ -380,7 +390,8 @@ export function AttendanceCalendar({ student }: Props) {
                   className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <TimeSelect
-                  value={selectedInfo.makeupTime ?? ""}
+                  key={visibleSelectedDate}
+                  defaultValue={selectedInfo.makeupTime ?? ""}
                   disabled={selectedSaving || !selectedInfo.makeupDate}
                   onChange={(next) => {
                     handleMakeupChange(visibleSelectedDate, selectedInfo.makeupDate, next || null);
@@ -397,7 +408,7 @@ export function AttendanceCalendar({ student }: Props) {
               {selectedInfo.makeupDate &&
                 isRegularClassDay(
                   selectedInfo.makeupDate,
-                  selectedInfo.classDaysSnapshot ?? student.classDays
+                  classDaysAsOf(selectedInfo.makeupDate, selectedInfo.classDaysSnapshot)
                 ) && (
                 <span className="font-normal text-amber-600">
                   ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
@@ -413,7 +424,7 @@ export function AttendanceCalendar({ student }: Props) {
                 {selectedInfo.makeupForDates.map(formatMonthDayLabel).join(", ")} 결석에 대한 보강일이에요 —{" "}
                 {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
               </p>
-              {isRegularClassDay(visibleSelectedDate, selectedInfo.classDaysSnapshot ?? student.classDays) && (
+              {isRegularClassDay(visibleSelectedDate, classDaysAsOf(visibleSelectedDate, selectedInfo.classDaysSnapshot)) && (
                 <p className="text-xs text-amber-600">
                   ⚠ 이 날은 정규 수업일이기도 해요. 체크인 기록만으로는 평소 등원과 보강을 구분할 수 없으니,
                   실제로 보강이 진행됐는지는 직접 확인해주세요.
