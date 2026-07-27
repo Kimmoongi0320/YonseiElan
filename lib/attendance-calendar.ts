@@ -298,7 +298,12 @@ export async function setAttendanceOverride(
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
-  if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
+  // A future absence may be made up ahead of time, so the makeup date only
+  // has to be no earlier than the absence date OR today — whichever is
+  // earlier — never strictly "before" both.
+  if (makeupDate !== null && makeupDate < date && makeupDate < kstDateString(Date.now())) {
+    throw new Error("Makeup date cannot be before the absence date or today");
+  }
   if (makeupDate !== null && (makeupTime === null || !TIME_RE.test(makeupTime))) {
     throw new Error("Invalid makeup time");
   }
@@ -354,7 +359,12 @@ export async function setAttendanceMakeupDate(
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
-  if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
+  // A future absence may be made up ahead of time, so the makeup date only
+  // has to be no earlier than the absence date OR today — whichever is
+  // earlier — never strictly "before" both.
+  if (makeupDate !== null && makeupDate < date && makeupDate < kstDateString(Date.now())) {
+    throw new Error("Makeup date cannot be before the absence date or today");
+  }
   if (makeupDate !== null && (makeupTime === null || !TIME_RE.test(makeupTime))) {
     throw new Error("Invalid makeup time");
   }

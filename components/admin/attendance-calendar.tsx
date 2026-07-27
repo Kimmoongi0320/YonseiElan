@@ -379,12 +379,12 @@ export function AttendanceCalendar({ student }: Props) {
               <div className="flex gap-2">
                 <input
                   type="date"
-                  min={visibleSelectedDate}
+                  min={visibleSelectedDate < todayStr ? visibleSelectedDate : todayStr}
                   value={selectedInfo.makeupDate ?? ""}
                   disabled={selectedSaving}
                   onChange={(e) => {
                     const value = e.target.value || null;
-                    if (value && value < visibleSelectedDate) return;
+                    if (value && value < visibleSelectedDate && value < todayStr) return;
                     handleMakeupChange(visibleSelectedDate, value, selectedInfo.makeupTime);
                   }}
                   className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
