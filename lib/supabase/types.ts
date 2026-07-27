@@ -10,6 +10,7 @@ export type Database = {
           parent_phone_last4: string;
           memo: string | null;
           class_days: string[];
+          payment_day: number | null;
           is_active: boolean;
           created_at: string;
         };
@@ -20,6 +21,7 @@ export type Database = {
           parent_phone: string;
           memo?: string | null;
           class_days?: string[];
+          payment_day?: number | null;
           is_active?: boolean;
           created_at?: string;
         };
@@ -30,6 +32,7 @@ export type Database = {
           parent_phone?: string;
           memo?: string | null;
           class_days?: string[];
+          payment_day?: number | null;
           is_active?: boolean;
         };
         Relationships: [];

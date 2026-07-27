@@ -135,14 +135,17 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
     return d.day > today.day;
   };
 
-  const withSaving = async (dateStr: string, task: () => Promise<void>) => {
+  const withSaving = async (dateStr: string, task: () => Promise<Record<string, DayAttendanceInfo>>) => {
     setSavingDates((prev) => new Set(prev).add(dateStr));
     try {
-      await task();
+      const updates = await task();
+      setData((prev) => ({ ...prev, ...updates }));
     } catch (error) {
       console.error("Failed to save attendance override", error);
-    } finally {
+      // Unknown whether the write landed, so fall back to a full refetch to
+      // recover a consistent view. The happy path above skips this refetch.
       fetchMonth(student.id, year, month);
+    } finally {
       setSavingDates((prev) => {
         const next = new Set(prev);
         next.delete(dateStr);
@@ -192,7 +195,20 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
   return (
     <Modal open={open} onClose={onClose} maxWidthClassName="max-w-4xl">
       <div className="flex flex-col gap-4">
-        <h2 className="text-lg font-bold text-navy-900">{student.name} 출석 달력</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-navy-900">{student.name} 출석 달력</h2>
+          {student.paymentDay != null && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
+              <span
+                className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white"
+                aria-hidden="true"
+              >
+                ₩
+              </span>
+              결제일 매월 {student.paymentDay}일
+            </span>
+          )}
+        </div>
 
         <div className="flex items-center justify-between">
           <button
@@ -239,6 +255,8 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                 const isToday = year === today.year && month === today.month && day === today.day;
                 const isSelected = selectedDate === dateStr;
                 const saving = savingDates.has(dateStr);
+                const isClassDay = isRegularClassDay(dateStr, student.classDays);
+                const isPaymentDay = student.paymentDay === day;
 
                 const statusClassName =
                   info.status === "present"
@@ -254,11 +272,26 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                     onClick={() => setSelectedDate(dateStr)}
                     aria-pressed={isSelected}
                     aria-label={`${month}월 ${day}일 선택`}
-                    className={`flex min-h-[92px] flex-col gap-1 rounded-xl border p-1.5 text-left text-[11px] leading-tight transition-colors hover:brightness-95 ${statusClassName} ${
+                    className={`relative flex min-h-[92px] flex-col gap-1 rounded-xl border p-1.5 text-left text-[11px] leading-tight transition-colors hover:brightness-95 ${statusClassName} ${
                       isSelected ? "ring-2 ring-navy-900" : isToday ? "ring-2 ring-gold-500 ring-offset-1" : ""
                     } ${saving ? "opacity-50" : ""}`}
                   >
-                    <span className={`font-semibold ${isToday ? "text-gold-600" : "text-navy-900"}`}>{day}</span>
+                    {isPaymentDay && (
+                      <span
+                        className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white shadow-sm"
+                        title="결제일"
+                      >
+                        ₩
+                      </span>
+                    )}
+
+                    <span
+                      className={`${isClassDay ? "font-extrabold underline decoration-2 underline-offset-2" : "font-semibold"} ${
+                        isToday ? "text-gold-600" : "text-navy-900"
+                      }`}
+                    >
+                      {day}
+                    </span>
 
                     {(info.checkInAt != null || info.checkOutAt != null) && (
                       <div className="text-navy-900/50">

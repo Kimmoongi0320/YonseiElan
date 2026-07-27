@@ -16,6 +16,7 @@ create table if not exists students (
   ) stored,
   memo text,
   class_days text[] not null default '{}',
+  payment_day integer check (payment_day between 1 and 31),
   is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -26,11 +27,13 @@ create table if not exists students (
 alter table students add column if not exists age integer;
 alter table students add column if not exists memo text;
 alter table students add column if not exists class_days text[] not null default '{}';
+alter table students add column if not exists payment_day integer check (payment_day between 1 and 31);
 
 comment on column students.parent_phone is '보호자 전화번호 (하이픈 포함 원문, 예: 010-1234-5678)';
 comment on column students.parent_phone_last4 is '키오스크 조회용 뒤 4자리 — parent_phone에서 자동 계산됨';
 comment on column students.memo is '관리자 메모 (특이사항 등)';
 comment on column students.class_days is '수업 요일(월~토) — mon/tue/wed/thu/fri/sat 값의 배열';
+comment on column students.payment_day is '매월 결제일 (1~31) — 출석 달력에 표시용, 선택 입력';
 
 create index if not exists students_parent_phone_last4_idx
   on students (parent_phone_last4)

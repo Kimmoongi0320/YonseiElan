@@ -16,6 +16,7 @@ export type AdminStudent = {
   parentPhone: string;
   memo: string;
   classDays: DayKey[];
+  paymentDay: number | null;
   status: AttendanceStatus;
   checkInAt: number | null;
   checkOutAt: number | null;
@@ -27,6 +28,7 @@ export type StudentInput = {
   parentPhone: string;
   memo: string;
   classDays: DayKey[];
+  paymentDay: number | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,7 +84,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   const { data: students, error } = await supabase
     .from("students")
     .select(
-      "id, name, age, parent_phone, memo, class_days, attendance_records(check_in_at, check_out_at)"
+      "id, name, age, parent_phone, memo, class_days, payment_day, attendance_records(check_in_at, check_out_at)"
     )
     .eq("is_active", true)
     .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
@@ -115,6 +117,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
       parentPhone: s.parent_phone,
       memo: s.memo ?? "",
       classDays: (s.class_days ?? []) as DayKey[],
+      paymentDay: s.payment_day,
       status,
       checkInAt,
       checkOutAt,
@@ -130,6 +133,7 @@ export async function createStudent(input: StudentInput): Promise<void> {
     parent_phone: input.parentPhone,
     memo: input.memo || null,
     class_days: input.classDays,
+    payment_day: input.paymentDay,
   });
 
   if (error) throw error;
@@ -145,6 +149,7 @@ export async function updateStudent(id: string, input: StudentInput): Promise<vo
       parent_phone: input.parentPhone,
       memo: input.memo || null,
       class_days: input.classDays,
+      payment_day: input.paymentDay,
     })
     .eq("id", id);
 

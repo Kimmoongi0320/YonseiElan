@@ -15,6 +15,7 @@ export function Modal({ open, onClose, children, maxWidthClassName = "max-w-sm" 
   onCloseRef.current = onClose;
   const pushedHistoryRef = useRef(false);
   const ignoreNextPopRef = useRef(false);
+  const pendingPopCorrectionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -48,15 +49,21 @@ export function Modal({ open, onClose, children, maxWidthClassName = "max-w-sm" 
   useEffect(() => {
     if (!open) return;
 
-    window.history.pushState({ modalOpen: true }, "");
+    // Dev-mode Strict Mode replays this effect (mount, cleanup, mount) before
+    // paint. If the cleanup below already scheduled a corrective history.back(),
+    // this is that replay's real mount — cancel the correction and keep the
+    // entry it already pushed instead of pushing a second one. A real close
+    // never runs this branch synchronously afterward, so the correction still
+    // fires normally in that case.
+    if (pendingPopCorrectionRef.current != null) {
+      clearTimeout(pendingPopCorrectionRef.current);
+      pendingPopCorrectionRef.current = null;
+    } else {
+      window.history.pushState({ modalOpen: true }, "");
+    }
     pushedHistoryRef.current = true;
 
     const handlePopState = () => {
-      // Dev-mode Strict Mode double-invokes this effect (mount, cleanup, mount),
-      // and the cleanup's corrective history.back() below resolves asynchronously
-      // as its own popstate event. Without this guard, that self-triggered event
-      // lands on the second mount's listener and closes the modal right after it
-      // opens. A real back-button press never sets this flag, so it still closes.
       if (ignoreNextPopRef.current) {
         ignoreNextPopRef.current = false;
         return;
@@ -68,11 +75,13 @@ export function Modal({ open, onClose, children, maxWidthClassName = "max-w-sm" 
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("popstate", handlePopState);
-      if (pushedHistoryRef.current) {
-        pushedHistoryRef.current = false;
+      if (!pushedHistoryRef.current) return;
+      pushedHistoryRef.current = false;
+      pendingPopCorrectionRef.current = setTimeout(() => {
+        pendingPopCorrectionRef.current = null;
         ignoreNextPopRef.current = true;
         window.history.back();
-      }
+      }, 0);
     };
   }, [open]);
 

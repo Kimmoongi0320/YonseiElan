@@ -23,7 +23,7 @@ export default function AdminAuthPage() {
         body: JSON.stringify({ pin }),
       });
       if (res.ok) {
-        router.push("/admin/dashboard");
+        router.replace("/admin/dashboard");
         return;
       }
       setError(true);

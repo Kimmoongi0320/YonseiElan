@@ -48,6 +48,7 @@ export async function upsertStudentAction(
   const parentPhone = String(formData.get("parentPhone") ?? "").trim();
   const memo = String(formData.get("memo") ?? "").trim();
   const classDaysRaw = formData.getAll("classDays").map(String);
+  const paymentDayRaw = String(formData.get("paymentDay") ?? "").trim();
 
   if (!name) {
     return { error: "이름을 입력해주세요." };
@@ -67,7 +68,22 @@ export async function upsertStudentAction(
     }
   }
 
-  const input = { name, age, parentPhone, memo, classDays: classDaysRaw as DayKey[] };
+  let paymentDay: number | null = null;
+  if (paymentDayRaw) {
+    paymentDay = Number(paymentDayRaw);
+    if (!Number.isInteger(paymentDay) || paymentDay < 1 || paymentDay > 31) {
+      return { error: "결제일을 올바르게 입력해주세요." };
+    }
+  }
+
+  const input = {
+    name,
+    age,
+    parentPhone,
+    memo,
+    classDays: classDaysRaw as DayKey[],
+    paymentDay,
+  };
 
   if (id) {
     if (!(await findStudentById(id))) {
@@ -113,27 +129,27 @@ export async function setAttendanceStatusAction(
   studentId: string,
   date: string,
   status: "present" | "absent" | "auto"
-): Promise<void> {
+): Promise<Record<string, DayAttendanceInfo>> {
   await requireAdminSession();
 
   if (!DATE_RE.test(date)) {
     throw new Error("Invalid date");
   }
 
-  if (status === "auto") {
-    await clearAttendanceOverride(studentId, date);
-  } else {
-    await setAttendanceOverride(studentId, date, status);
-  }
+  const result =
+    status === "auto"
+      ? await clearAttendanceOverride(studentId, date)
+      : await setAttendanceOverride(studentId, date, status);
 
   revalidatePath("/admin/dashboard");
+  return result;
 }
 
 export async function setAttendanceMakeupDateAction(
   studentId: string,
   date: string,
   makeupDate: string | null
-): Promise<void> {
+): Promise<Record<string, DayAttendanceInfo>> {
   await requireAdminSession();
 
   if (!DATE_RE.test(date)) {
@@ -143,8 +159,9 @@ export async function setAttendanceMakeupDateAction(
     throw new Error("Invalid makeup date");
   }
 
-  await setAttendanceMakeupDate(studentId, date, makeupDate);
+  const result = await setAttendanceMakeupDate(studentId, date, makeupDate);
   revalidatePath("/admin/dashboard");
+  return result;
 }
 
 export type NotificationFormState = { error: string } | null;

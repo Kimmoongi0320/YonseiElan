@@ -122,6 +122,22 @@ export function StudentFormModal({ open, onClose, student }: Props) {
         </div>
 
         <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+          결제일
+          <select
+            name="paymentDay"
+            defaultValue={student?.paymentDay ?? ""}
+            className={inputClass}
+          >
+            <option value="">선택 안 함</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+              <option key={day} value={day}>
+                매월 {day}일
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
           메모
           <textarea
             name="memo"
