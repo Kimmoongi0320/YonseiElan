@@ -98,6 +98,87 @@ create index if not exists attendance_overrides_student_id_idx
   on attendance_overrides (student_id);
 
 -- ---------------------------------------------------------------------------
+-- payment_cycle_start_date / get_student_session_counts — backs the "n회차"
+-- badge on the admin dashboard's student list. Computed in SQL (one row per
+-- student out) rather than pulling raw attendance rows into the app and
+-- counting there, so the response size stays bounded by student count
+-- instead of by attendance history length as the roster grows.
+-- ---------------------------------------------------------------------------
+create or replace function payment_cycle_start_date(payment_day integer, ref_date date)
+returns date
+language sql
+immutable
+as $$
+  select case
+    when extract(day from ref_date)::int >= least(
+      payment_day,
+      extract(day from (date_trunc('month', ref_date) + interval '1 month - 1 day'))::int
+    )
+    then date_trunc('month', ref_date)::date
+      + (least(payment_day, extract(day from (date_trunc('month', ref_date) + interval '1 month - 1 day'))::int) - 1)
+    else date_trunc('month', ref_date - interval '1 month')::date
+      + (least(
+          payment_day,
+          extract(day from (date_trunc('month', ref_date - interval '1 month') + interval '1 month - 1 day'))::int
+         ) - 1)
+  end;
+$$;
+
+comment on function payment_cycle_start_date(integer, date) is
+  '결제일(payment_day, 1~31)을 기준으로 ref_date가 속한 결제 주기의 시작일을 구한다. 그 달에 해당 일자가 없으면(예: 31일인데 2월) 그 달 마지막 날로 clamp.';
+
+-- For each active student with a payment_day set: counts distinct dates,
+-- since the most recent payment_day through today (both KST), where the
+-- student is resolved "present" — a real check-in in attendance_records, or
+-- a present override — with an attendance_overrides row always winning over
+-- a check-in on the same date (matching the precedence used by the
+-- per-student attendance calendar).
+create or replace function get_student_session_counts()
+returns table (student_id uuid, session_count integer)
+language sql
+stable
+as $$
+  with today as (
+    select (now() at time zone 'Asia/Seoul')::date as d
+  ),
+  cycles as (
+    select s.id as student_id, payment_cycle_start_date(s.payment_day, (select d from today)) as cycle_start
+    from students s
+    where s.is_active and s.payment_day is not null
+  ),
+  checkins as (
+    select distinct ar.student_id, (ar.check_in_at at time zone 'Asia/Seoul')::date as d
+    from attendance_records ar
+    join cycles c on c.student_id = ar.student_id
+    where (ar.check_in_at at time zone 'Asia/Seoul')::date >= c.cycle_start
+  ),
+  present_overrides as (
+    select ao.student_id, ao.date as d
+    from attendance_overrides ao
+    join cycles c on c.student_id = ao.student_id
+    where ao.status = 'present' and ao.date >= c.cycle_start and ao.date <= (select d from today)
+  ),
+  absent_overrides as (
+    select ao.student_id, ao.date as d
+    from attendance_overrides ao
+    join cycles c on c.student_id = ao.student_id
+    where ao.status = 'absent' and ao.date >= c.cycle_start and ao.date <= (select d from today)
+  ),
+  present_dates as (
+    (select student_id, d from checkins union select student_id, d from present_overrides)
+    except
+    select student_id, d from absent_overrides
+  )
+  select c.student_id, count(pd.d)::int as session_count
+  from cycles c
+  left join present_dates pd on pd.student_id = c.student_id
+  group by c.student_id;
+$$;
+
+comment on function get_student_session_counts() is
+  '학생별 이번 결제 주기(가장 최근 결제일~오늘, KST) 출석일 수. 관리자 대시보드 "n회차" 배지용.';
+
+-- ---------------------------------------------------------------------------
 -- Auto check-out at 22:00 KST — students who checked in but were never
 -- checked out get closed out automatically at the academy's closing time.
 -- pg_cron runs in UTC, and KST has no DST (always UTC+9), so 22:00 KST is a

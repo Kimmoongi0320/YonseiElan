@@ -119,6 +119,11 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      get_student_session_counts: {
+        Args: Record<PropertyKey, never>;
+        Returns: { student_id: string; session_count: number }[];
+      };
+    };
   };
 };

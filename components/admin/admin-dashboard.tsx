@@ -52,6 +52,15 @@ function AttendanceTimes({
   );
 }
 
+function SessionCountBadge({ sessionCount }: { sessionCount: number | null }) {
+  if (sessionCount == null) return null;
+  return (
+    <span className="inline-flex items-center rounded-full bg-navy-900/5 px-2.5 py-0.5 text-[11px] font-semibold text-navy-900/60">
+      {sessionCount}회차
+    </span>
+  );
+}
+
 export function AdminDashboard({ students }: { students: AdminStudent[] }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -267,7 +276,10 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                 </span>
               </label>
               <span className="flex flex-col items-end gap-1">
-                <StatusBadge status={s.status} />
+                <span className="flex items-center gap-1.5">
+                  <StatusBadge status={s.status} />
+                  <SessionCountBadge sessionCount={s.sessionCount} />
+                </span>
                 <AttendanceTimes checkInAt={s.checkInAt} checkOutAt={s.checkOutAt} />
               </span>
             </div>
@@ -382,7 +394,10 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   </div>
                 </td>
                 <td className="px-3 py-4">
-                  <StatusBadge status={s.status} />
+                  <div className="flex items-center gap-1.5">
+                    <StatusBadge status={s.status} />
+                    <SessionCountBadge sessionCount={s.sessionCount} />
+                  </div>
                 </td>
                 <td className="px-3 py-4">
                   <AttendanceTimes checkInAt={s.checkInAt} checkOutAt={s.checkOutAt} />

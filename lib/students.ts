@@ -20,6 +20,10 @@ export type AdminStudent = {
   status: AttendanceStatus;
   checkInAt: number | null;
   checkOutAt: number | null;
+  // Count of days marked present since the most recent payment_day, through
+  // today (the current billing cycle). Null when the student has no
+  // payment_day set (there's no cycle to count within).
+  sessionCount: number | null;
 };
 
 export type StudentInput = {
@@ -103,20 +107,32 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   const supabase = getSupabaseServerClient();
   const now = Date.now();
 
-  // Single round trip: fetch students with today's attendance records embedded,
-  // instead of a students query followed by a dependent attendance_records query.
-  const { data: students, error } = await supabase
-    .from("students")
-    .select(
-      "id, name, age, parent_phone, memo, class_days, payment_day, attendance_records(check_in_at, check_out_at)"
-    )
-    .eq("is_active", true)
-    .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
-    .order("name", { ascending: true })
-    .order("check_in_at", { ascending: false, referencedTable: "attendance_records" });
+  // Two independent round trips in parallel: students with today's
+  // attendance embedded, and per-student session counts computed in SQL
+  // (see get_student_session_counts in supabase/schema.sql) — the latter
+  // returns one row per student regardless of attendance history size.
+  const [studentsResult, sessionCountsResult] = await Promise.all([
+    supabase
+      .from("students")
+      .select(
+        "id, name, age, parent_phone, memo, class_days, payment_day, attendance_records(check_in_at, check_out_at)"
+      )
+      .eq("is_active", true)
+      .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
+      .order("name", { ascending: true })
+      .order("check_in_at", { ascending: false, referencedTable: "attendance_records" }),
+    supabase.rpc("get_student_session_counts"),
+  ]);
 
-  if (error) throw error;
+  if (studentsResult.error) throw studentsResult.error;
+  if (sessionCountsResult.error) throw sessionCountsResult.error;
+
+  const students = studentsResult.data;
   if (!students || students.length === 0) return [];
+
+  const sessionCountByStudent = new Map(
+    (sessionCountsResult.data ?? []).map((r) => [r.student_id, r.session_count])
+  );
 
   return students.map((s) => {
     const latest = s.attendance_records?.[0];
@@ -145,6 +161,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
       status,
       checkInAt,
       checkOutAt,
+      sessionCount: sessionCountByStudent.get(s.id) ?? null,
     };
   });
 }
