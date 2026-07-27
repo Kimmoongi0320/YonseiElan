@@ -14,8 +14,9 @@ export type DayAttendanceInfo = {
   // makeupDate is null.
   makeupTime: string | null;
   // Non-empty when this day IS the scheduled makeup date for one or more
-  // absences on other dates (multiple absences can share one makeup day).
-  makeupForDates: string[];
+  // absences on other dates (multiple absences can share one makeup day,
+  // in principle at different times each).
+  makeupForDates: { date: string; time: string | null }[];
   // True once THIS day's own scheduled makeup (at makeupDate) has an actual
   // check-in or present override. Only meaningful when makeupDate is set —
   // read when displaying this day in its role as the absence.
@@ -174,13 +175,13 @@ export async function getStudentMonthAttendance(
 
     if (override.makeup_date && override.makeup_date >= startDate && override.makeup_date < endDate) {
       const entry = ensure(override.makeup_date);
-      entry.makeupForDates.push(override.date);
+      entry.makeupForDates.push({ date: override.date, time: override.makeup_time });
       entry.targetFulfilled = isMakeupCompleted(override.makeup_date);
       entry.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
     }
   }
 
-  for (const entry of Object.values(result)) entry.makeupForDates.sort();
+  for (const entry of Object.values(result)) entry.makeupForDates.sort((a, b) => a.date.localeCompare(b.date));
 
   return result;
 }
@@ -276,13 +277,13 @@ export async function getDatesAttendanceInfo(
 
     if (override.makeup_date) {
       const target = ensure(override.makeup_date);
-      target.makeupForDates.push(override.date);
+      target.makeupForDates.push({ date: override.date, time: override.makeup_time });
       target.targetFulfilled = isMakeupCompleted(override.makeup_date);
       target.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
     }
   }
 
-  for (const entry of Object.values(result)) entry.makeupForDates.sort();
+  for (const entry of Object.values(result)) entry.makeupForDates.sort((a, b) => a.date.localeCompare(b.date));
 
   return result;
 }

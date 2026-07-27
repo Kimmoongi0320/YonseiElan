@@ -421,8 +421,10 @@ export function AttendanceCalendar({ student }: Props) {
           {selectedInfo.makeupForDates.length > 0 && (
             <div className="flex flex-col gap-1">
               <p className="text-xs text-navy-900/50">
-                {selectedInfo.makeupForDates.map(formatMonthDayLabel).join(", ")} 결석에 대한 보강일이에요 —{" "}
-                {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
+                {selectedInfo.makeupForDates
+                  .map((m) => `${formatMonthDayLabel(m.date)}${m.time ? ` ${m.time}` : ""}`)
+                  .join(", ")}{" "}
+                결석에 대한 보강일이에요 — {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
               </p>
               {isRegularClassDay(visibleSelectedDate, classDaysAsOf(visibleSelectedDate, selectedInfo.classDaysSnapshot)) && (
                 <p className="text-xs text-amber-600">
