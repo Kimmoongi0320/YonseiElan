@@ -46,12 +46,16 @@ function formatMonthDayLabel(dateStr: string): string {
   return `${Number(m)}월 ${Number(d)}일`;
 }
 
-// Lessons are always 1 hour — this is a display-only computation, not a
+// Lessons are always 50 minutes — this is a display-only computation, not a
 // stored value.
+const CLASS_DURATION_MIN = 50;
+
 function formatTimeRange(time: string): string {
   const [h, m] = time.split(":").map(Number);
-  const endH = (h + 1) % 24;
-  return `${time}–${pad2(endH)}:${pad2(m)}`;
+  const endTotalMin = h * 60 + m + CLASS_DURATION_MIN;
+  const endH = Math.floor(endTotalMin / 60) % 24;
+  const endM = endTotalMin % 60;
+  return `${time}–${pad2(endH)}:${pad2(endM)}`;
 }
 
 function sortByTime(a: Entry, b: Entry): number {
@@ -94,7 +98,7 @@ type DayTimetable = {
 };
 
 // Lays entries with a time out on an hourly grid, like a calendar day view:
-// each entry gets a fixed one-hour-tall block positioned at its start time.
+// each entry gets a fixed CLASS_DURATION_MIN-tall block positioned at its start time.
 // Entries that overlap (same or overlapping hour) are split into side-by-side
 // columns via standard interval partitioning, rather than stacking on top of
 // each other, up to MAX_VISIBLE_COLUMNS — any further entries in the same
@@ -106,7 +110,7 @@ function buildDayTimetable(entries: Entry[]): DayTimetable {
 
   const starts = timed.map((e) => timeToMinutes(e.time));
   const rawStartHour = starts.length ? Math.floor(Math.min(...starts) / 60) : DEFAULT_START_HOUR;
-  const rawEndHour = starts.length ? Math.ceil((Math.max(...starts) + 60) / 60) : DEFAULT_END_HOUR;
+  const rawEndHour = starts.length ? Math.ceil((Math.max(...starts) + CLASS_DURATION_MIN) / 60) : DEFAULT_END_HOUR;
   const startHour = Math.max(0, rawStartHour - 1);
   const endHour = Math.min(24, rawEndHour + 1);
 
@@ -117,9 +121,9 @@ function buildDayTimetable(entries: Entry[]): DayTimetable {
   let i = 0;
   while (i < sorted.length) {
     let clusterEnd = i + 1;
-    let clusterMaxEnd = timeToMinutes(sorted[i].time) + 60;
+    let clusterMaxEnd = timeToMinutes(sorted[i].time) + CLASS_DURATION_MIN;
     while (clusterEnd < sorted.length && timeToMinutes(sorted[clusterEnd].time) < clusterMaxEnd) {
-      clusterMaxEnd = Math.max(clusterMaxEnd, timeToMinutes(sorted[clusterEnd].time) + 60);
+      clusterMaxEnd = Math.max(clusterMaxEnd, timeToMinutes(sorted[clusterEnd].time) + CLASS_DURATION_MIN);
       clusterEnd++;
     }
     const cluster = sorted.slice(i, clusterEnd);
@@ -130,7 +134,7 @@ function buildDayTimetable(entries: Entry[]): DayTimetable {
     const columnByIndex: number[] = [];
     for (const entry of cluster) {
       const entryStart = timeToMinutes(entry.time);
-      const entryEnd = entryStart + 60;
+      const entryEnd = entryStart + CLASS_DURATION_MIN;
       const col = columnEnds.findIndex((end) => end <= entryStart);
       if (col === -1) {
         columnByIndex.push(columnEnds.length);
@@ -163,7 +167,7 @@ function buildDayTimetable(entries: Entry[]): DayTimetable {
     if (overflowEntries.length > 0) {
       const overflowStarts = overflowEntries.map((e) => timeToMinutes(e.time as string));
       const minStart = Math.min(...overflowStarts);
-      const maxEnd = Math.max(...overflowStarts) + 60;
+      const maxEnd = Math.max(...overflowStarts) + CLASS_DURATION_MIN;
       overflow.push({
         top: ((minStart - startHour * 60) / 60) * HOUR_HEIGHT,
         height: ((maxEnd - minStart) / 60) * HOUR_HEIGHT,
@@ -408,7 +412,7 @@ export function ScheduleCalendar({ students }: Props) {
                             className="absolute px-0.5"
                             style={{
                               top: entry.top,
-                              height: HOUR_HEIGHT,
+                              height: (CLASS_DURATION_MIN / 60) * HOUR_HEIGHT,
                               left: `${entry.left}%`,
                               width: `${entry.width}%`,
                             }}
