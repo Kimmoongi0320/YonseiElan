@@ -72,6 +72,7 @@ export type Database = {
           date: string;
           status: string;
           makeup_date: string | null;
+          class_days_snapshot: string[] | null;
           created_at: string;
         };
         Insert: {
@@ -80,11 +81,13 @@ export type Database = {
           date: string;
           status: string;
           makeup_date?: string | null;
+          class_days_snapshot?: string[] | null;
           created_at?: string;
         };
         Update: {
           status?: string;
           makeup_date?: string | null;
+          class_days_snapshot?: string[] | null;
         };
         Relationships: [
           {

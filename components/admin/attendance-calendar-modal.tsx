@@ -54,6 +54,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     makeupDate: null,
     makeupForDates: [],
     makeupCompleted: false,
+    classDaysSnapshot: null,
   };
 }
 
@@ -307,7 +308,7 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                         }`}
                       >
                         {formatMonthDayLabel(info.makeupDate)} {info.makeupCompleted ? "보강완료" : "보강"}
-                        {isRegularClassDay(info.makeupDate, student.classDays) && " · 정규"}
+                        {isRegularClassDay(info.makeupDate, info.classDaysSnapshot ?? student.classDays) && " · 정규"}
                       </div>
                     )}
 
@@ -319,7 +320,7 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                       >
                         {info.makeupCompleted ? "보강완료" : "보강예정"}
                         {info.makeupForDates.length > 1 && ` ×${info.makeupForDates.length}`}
-                        {isRegularClassDay(dateStr, student.classDays) && " · 정규"}
+                        {isRegularClassDay(dateStr, info.classDaysSnapshot ?? student.classDays) && " · 정규"}
                       </div>
                     )}
                   </button>
@@ -386,7 +387,11 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                       {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
                     </span>
                   )}
-                  {selectedInfo.makeupDate && isRegularClassDay(selectedInfo.makeupDate, student.classDays) && (
+                  {selectedInfo.makeupDate &&
+                    isRegularClassDay(
+                      selectedInfo.makeupDate,
+                      selectedInfo.classDaysSnapshot ?? student.classDays
+                    ) && (
                     <span className="font-normal text-amber-600">
                       ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
                       평소처럼 등원한 것인지 보강을 위해 온 것인지 구분되지 않으니 참고해주세요.
@@ -401,7 +406,7 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                     {selectedInfo.makeupForDates.map(formatMonthDayLabel).join(", ")} 결석에 대한 보강일이에요 —{" "}
                     {selectedInfo.makeupCompleted ? "보강완료" : "보강예정"}
                   </p>
-                  {isRegularClassDay(visibleSelectedDate, student.classDays) && (
+                  {isRegularClassDay(visibleSelectedDate, selectedInfo.classDaysSnapshot ?? student.classDays) && (
                     <p className="text-xs text-amber-600">
                       ⚠ 이 날은 정규 수업일이기도 해요. 체크인 기록만으로는 평소 등원과 보강을 구분할 수 없으니,
                       실제로 보강이 진행됐는지는 직접 확인해주세요.

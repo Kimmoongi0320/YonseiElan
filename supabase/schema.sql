@@ -76,6 +76,7 @@ create table if not exists attendance_overrides (
   date date not null,
   status text not null check (status in ('present', 'absent')),
   makeup_date date,
+  class_days_snapshot text[],
   created_at timestamptz not null default now(),
 
   unique (student_id, date)
@@ -84,8 +85,14 @@ create table if not exists attendance_overrides (
 -- Migration for pre-existing databases created before makeup_date was added.
 alter table attendance_overrides add column if not exists makeup_date date;
 
+-- Migration for pre-existing databases created before class_days_snapshot was added.
+alter table attendance_overrides add column if not exists class_days_snapshot text[];
+
 comment on column attendance_overrides.makeup_date is
   '결석(status=absent)에 대한 보강 예정 날짜. 그 날짜에 학생이 실제로 등원하면 보강완료로 표시됨.';
+
+comment on column attendance_overrides.class_days_snapshot is
+  '이 행이 마지막으로 생성/수정된 시점의 students.class_days 값. 등원 요일이 나중에 바뀌어도 "정규 수업일이었는지" 판정은 이 스냅샷을 기준으로 한다. 이 컬럼이 추가되기 전에 만들어진 뒤로 한 번도 다시 수정되지 않은 행은 null.';
 
 create index if not exists attendance_overrides_student_id_idx
   on attendance_overrides (student_id);
@@ -112,6 +119,57 @@ select cron.schedule(
   update attendance_records
   set check_out_at = now()
   where check_out_at is null;
+  $$
+);
+
+-- ---------------------------------------------------------------------------
+-- Auto-absence at 22:05 KST — students whose today (KST) falls on one of
+-- their class_days but who never checked in get marked absent automatically.
+-- Runs a few minutes after the checkout job above so it never races it.
+-- An existing override for today (whether admin-set present/absent, or one
+-- this job already inserted) is left alone via on conflict do nothing, so an
+-- admin's manual call always wins over the automatic one.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'auto-absence-2205-kst') then
+    perform cron.unschedule('auto-absence-2205-kst');
+  end if;
+end $$;
+
+select cron.schedule(
+  'auto-absence-2205-kst',
+  '5 13 * * *',
+  $$
+  insert into attendance_overrides (student_id, date, status, class_days_snapshot)
+  select
+    s.id,
+    (now() + interval '9 hours')::date,
+    'absent',
+    s.class_days
+  from students s
+  where s.is_active
+    and (
+      case extract(dow from (now() + interval '9 hours')::date)
+        when 1 then 'mon'
+        when 2 then 'tue'
+        when 3 then 'wed'
+        when 4 then 'thu'
+        when 5 then 'fri'
+        when 6 then 'sat'
+      end
+    ) = any (s.class_days)
+    and not exists (
+      select 1 from attendance_records ar
+      where ar.student_id = s.id
+        and (ar.check_in_at + interval '9 hours')::date = (now() + interval '9 hours')::date
+    )
+    and not exists (
+      select 1 from attendance_overrides ao
+      where ao.student_id = s.id
+        and ao.date = (now() + interval '9 hours')::date
+    )
+  on conflict (student_id, date) do nothing;
   $$
 );
 
