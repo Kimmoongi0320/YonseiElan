@@ -75,11 +75,6 @@ function formatShortTime(ts: number): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-function parseDateStr(dateStr: string): { year: number; month: number; day: number } {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  return { year: y, month: m, day: d };
-}
-
 // True when the date falls on one of the student's regular weekly class
 // days, so a scheduled makeup there would overlap with an already-planned
 // regular session rather than being an extra, dedicated visit.
@@ -132,14 +127,6 @@ export function AttendanceCalendar({ student }: Props) {
     }
     setYear(nextYear);
     setMonth(nextMonth);
-  };
-
-  const isFutureDay = (dateStr: string) => {
-    const d = parseDateStr(dateStr);
-    if (d.year !== today.year || d.month !== today.month) {
-      return d.year > today.year || (d.year === today.year && d.month > today.month);
-    }
-    return d.day > today.day;
   };
 
   // A "정규" (regular class day) warning only makes sense against the
@@ -214,7 +201,6 @@ export function AttendanceCalendar({ student }: Props) {
     selectedDate && selectedDate.startsWith(`${year}-${pad2(month)}-`) ? selectedDate : null;
   const selectedInfo = visibleSelectedDate ? (data[visibleSelectedDate] ?? emptyDayInfo()) : null;
   const selectedSaving = visibleSelectedDate != null && savingDates.has(visibleSelectedDate);
-  const selectedFuture = visibleSelectedDate != null && isFutureDay(visibleSelectedDate);
 
   return (
     <div className="flex flex-col gap-4">
@@ -349,28 +335,22 @@ export function AttendanceCalendar({ student }: Props) {
             )}
           </div>
 
-          {selectedFuture && (
-            <p className="text-xs text-navy-900/40">아직 지나지 않은 날짜예요. 결석과 보강 예약만 등록할 수 있어요.</p>
-          )}
-
           <div className="flex gap-2">
-            {(selectedFuture ? STATUS_OPTIONS.filter((opt) => opt.value !== "present") : STATUS_OPTIONS).map(
-              (opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={selectedSaving}
-                  onClick={() => handleStatusChange(visibleSelectedDate, opt.value)}
-                  className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                    selectedInfo.status === opt.value
-                      ? opt.activeClassName
-                      : "bg-white text-navy-900/60 hover:bg-navy-900/5"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ),
-            )}
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={selectedSaving}
+                onClick={() => handleStatusChange(visibleSelectedDate, opt.value)}
+                className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  selectedInfo.status === opt.value
+                    ? opt.activeClassName
+                    : "bg-white text-navy-900/60 hover:bg-navy-900/5"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
           {selectedInfo.status === "absent" && (
@@ -379,12 +359,10 @@ export function AttendanceCalendar({ student }: Props) {
               <div className="flex gap-2">
                 <input
                   type="date"
-                  min={visibleSelectedDate < todayStr ? visibleSelectedDate : todayStr}
                   value={selectedInfo.makeupDate ?? ""}
                   disabled={selectedSaving}
                   onChange={(e) => {
                     const value = e.target.value || null;
-                    if (value && value < visibleSelectedDate && value < todayStr) return;
                     handleMakeupChange(visibleSelectedDate, value, selectedInfo.makeupTime);
                   }}
                   className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
