@@ -421,11 +421,15 @@ export function AttendanceCalendar({ student }: Props) {
           {selectedInfo.makeupForDates.length > 0 && (
             <div className="flex flex-col gap-1">
               <p className="text-xs text-navy-900/50">
-                {selectedInfo.makeupForDates
-                  .map((m) => `${formatMonthDayLabel(m.date)}${m.time ? ` ${m.time}` : ""}`)
-                  .join(", ")}{" "}
-                결석에 대한 보강일이에요 — {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
+                이 날은 아래 결석에 대한 보강일이에요 — {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
               </p>
+              <ul className="flex flex-col gap-0.5 text-xs text-navy-900/50">
+                {selectedInfo.makeupForDates.map((m) => (
+                  <li key={m.date}>
+                    {formatMonthDayLabel(m.date)} 결석 → {m.time ?? "시간 미정"} 보강
+                  </li>
+                ))}
+              </ul>
               {isRegularClassDay(visibleSelectedDate, classDaysAsOf(visibleSelectedDate, selectedInfo.classDaysSnapshot)) && (
                 <p className="text-xs text-amber-600">
                   ⚠ 이 날은 정규 수업일이기도 해요. 체크인 기록만으로는 평소 등원과 보강을 구분할 수 없으니,
