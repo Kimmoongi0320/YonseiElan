@@ -75,6 +75,30 @@ export async function findStudentById(id: string): Promise<Student | null> {
   return { id: data.id, name: data.name, parentPhone: data.parent_phone };
 }
 
+export type AdminStudentSummary = Pick<AdminStudent, "id" | "name" | "classDays" | "paymentDay">;
+
+export async function getStudentSummaryForAdmin(id: string): Promise<AdminStudentSummary | null> {
+  if (!UUID_RE.test(id)) return null;
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, name, class_days, payment_day")
+    .eq("id", id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    classDays: (data.class_days ?? []) as DayKey[],
+    paymentDay: data.payment_day,
+  };
+}
+
 export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   const supabase = getSupabaseServerClient();
   const now = Date.now();
