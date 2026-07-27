@@ -52,7 +52,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     checkInAt: null,
     checkOutAt: null,
     makeupDate: null,
-    makeupForDate: null,
+    makeupForDates: [],
     makeupCompleted: false,
   };
 }
@@ -167,7 +167,7 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
     void withSaving(dateStr, () => setAttendanceStatusAction(student.id, dateStr, action));
   };
 
-  const handleMakeupDateBlur = (dateStr: string, makeupDate: string | null) => {
+  const handleMakeupDateChange = (dateStr: string, makeupDate: string | null) => {
     setData((prev) => {
       const entry = prev[dateStr];
       if (!entry) return prev;
@@ -311,13 +311,14 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                       </div>
                     )}
 
-                    {info.makeupForDate && (
+                    {info.makeupForDates.length > 0 && (
                       <div
                         className={`rounded px-1 py-0.5 text-center text-[10px] font-medium ${
                           info.makeupCompleted ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                         }`}
                       >
                         {info.makeupCompleted ? "보강완료" : "보강예정"}
+                        {info.makeupForDates.length > 1 && ` ×${info.makeupForDates.length}`}
                         {isRegularClassDay(dateStr, student.classDays) && " · 정규"}
                       </div>
                     )}
@@ -373,11 +374,10 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                 <label className="flex flex-col gap-1.5 text-xs font-medium text-navy-900/50">
                   보강 날짜
                   <input
-                    key={visibleSelectedDate}
                     type="date"
-                    defaultValue={selectedInfo.makeupDate ?? ""}
+                    value={selectedInfo.makeupDate ?? ""}
                     disabled={selectedSaving}
-                    onBlur={(e) => handleMakeupDateBlur(visibleSelectedDate, e.target.value || null)}
+                    onChange={(e) => handleMakeupDateChange(visibleSelectedDate, e.target.value || null)}
                     className="w-full max-w-[200px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   {selectedInfo.makeupDate && (
@@ -395,10 +395,10 @@ export function AttendanceCalendarModal({ open, onClose, student }: Props) {
                 </label>
               )}
 
-              {selectedInfo.makeupForDate && (
+              {selectedInfo.makeupForDates.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <p className="text-xs text-navy-900/50">
-                    {formatMonthDayLabel(selectedInfo.makeupForDate)} 결석에 대한 보강일이에요 —{" "}
+                    {selectedInfo.makeupForDates.map(formatMonthDayLabel).join(", ")} 결석에 대한 보강일이에요 —{" "}
                     {selectedInfo.makeupCompleted ? "보강완료" : "보강예정"}
                   </p>
                   {isRegularClassDay(visibleSelectedDate, student.classDays) && (

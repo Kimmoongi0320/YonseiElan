@@ -9,11 +9,12 @@ export type DayAttendanceInfo = {
   checkOutAt: number | null;
   // Set when this (absent) day has a makeup class scheduled on another date.
   makeupDate: string | null;
-  // Set when this day IS the scheduled makeup date for an absence on another date.
-  makeupForDate: string | null;
+  // Non-empty when this day IS the scheduled makeup date for one or more
+  // absences on other dates (multiple absences can share one makeup day).
+  makeupForDates: string[];
   // True once the relevant makeup date has an actual check-in — read on
   // whichever side (the absence day via makeupDate, or the target day via
-  // makeupForDate) is currently being displayed.
+  // makeupForDates) is currently being displayed.
   makeupCompleted: boolean;
 };
 
@@ -44,7 +45,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     checkInAt: null,
     checkOutAt: null,
     makeupDate: null,
-    makeupForDate: null,
+    makeupForDates: [],
     makeupCompleted: false,
   };
 }
@@ -147,10 +148,12 @@ export async function getStudentMonthAttendance(
 
     if (override.makeup_date && override.makeup_date >= startDate && override.makeup_date < endDate) {
       const entry = ensure(override.makeup_date);
-      entry.makeupForDate = override.date;
+      entry.makeupForDates.push(override.date);
       entry.makeupCompleted = isMakeupCompleted(override.makeup_date);
     }
   }
+
+  for (const entry of Object.values(result)) entry.makeupForDates.sort();
 
   return result;
 }
@@ -246,10 +249,12 @@ export async function getDatesAttendanceInfo(
 
     if (override.makeup_date) {
       const target = ensure(override.makeup_date);
-      target.makeupForDate = override.date;
+      target.makeupForDates.push(override.date);
       target.makeupCompleted = isMakeupCompleted(override.makeup_date);
     }
   }
+
+  for (const entry of Object.values(result)) entry.makeupForDates.sort();
 
   return result;
 }
@@ -334,22 +339,19 @@ export async function clearAttendanceOverride(
 
   const supabase = getSupabaseServerClient();
 
-  const { data: prior, error: priorError } = await supabase
-    .from("attendance_overrides")
-    .select("makeup_date")
-    .eq("student_id", studentId)
-    .eq("date", date)
-    .maybeSingle();
-  if (priorError) throw priorError;
-
-  const { error } = await supabase
+  // .select() on the delete returns the row as it existed just before
+  // removal, so the makeup_date it carried can be read in the same
+  // round trip instead of a separate select beforehand.
+  const { data: deleted, error } = await supabase
     .from("attendance_overrides")
     .delete()
     .eq("student_id", studentId)
-    .eq("date", date);
+    .eq("date", date)
+    .select("makeup_date")
+    .maybeSingle();
 
   if (error) throw error;
 
-  const affectedDates = [date, prior?.makeup_date ?? null].filter((d): d is string => d != null);
+  const affectedDates = [date, deleted?.makeup_date ?? null].filter((d): d is string => d != null);
   return getDatesAttendanceInfo(studentId, affectedDates);
 }

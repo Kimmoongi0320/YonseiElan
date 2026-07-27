@@ -29,7 +29,7 @@ function kstClosingTimeMs(checkInAtMs: number): number {
   return kstMidnightMs + CHECKIN_CUTOFF_HOUR_KST * 60 * 60 * 1000;
 }
 
-async function getOpenRecord(studentId: string): Promise<OpenAttendanceRecord | null> {
+export async function getOpenRecord(studentId: string): Promise<OpenAttendanceRecord | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("attendance_records")
@@ -93,13 +93,14 @@ async function insertCheckInRecord(studentId: string, conflictMessage?: string) 
   };
 }
 
-export async function checkIn(studentId: string) {
+// `open` is fetched by the caller (in parallel with the student lookup),
+// rather than here, so the two independent reads don't run sequentially.
+export async function checkIn(studentId: string, open: OpenAttendanceRecord | null) {
   if (getKstHour(Date.now()) >= CHECKIN_CUTOFF_HOUR_KST) {
     return { ok: false as const, reason: "after-hours" as const, message: CHECKIN_CUTOFF_MESSAGE };
   }
 
   const now = Date.now();
-  const open = await getOpenRecord(studentId);
 
   if (open) {
     if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) {
@@ -133,8 +134,9 @@ async function performCheckOut(studentId: string) {
   };
 }
 
-export async function checkOut(studentId: string) {
-  const active = await getActiveRecord(studentId);
+// `active` is fetched by the caller (in parallel with the student lookup),
+// rather than here, so the two independent reads don't run sequentially.
+export async function checkOut(studentId: string, active: AttendanceRecord | null) {
   if (!active) {
     return { ok: false as const, reason: "not-checked-in" as const };
   }
@@ -152,12 +154,29 @@ export async function checkOut(studentId: string) {
 }
 
 // Admin-triggered check-out, used from the dashboard to release a student
-// before the normal wait period has elapsed.
+// before the normal wait period has elapsed. No elapsed-time gate to check,
+// so the open-record lookup and the check-out itself are folded into a
+// single conditional update instead of a separate select + update.
 export async function adminCheckOut(studentId: string) {
-  const active = await getActiveRecord(studentId);
-  if (!active) {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .update({ check_out_at: new Date().toISOString() })
+    .eq("student_id", studentId)
+    .is("check_out_at", null)
+    .select("check_in_at, check_out_at")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
     return { ok: false as const, reason: "not-checked-in" as const };
   }
 
-  return { ok: true as const, record: await performCheckOut(studentId) };
+  return {
+    ok: true as const,
+    record: {
+      checkInAt: new Date(data.check_in_at).getTime(),
+      checkOutAt: new Date(data.check_out_at as string).getTime(),
+    },
+  };
 }
