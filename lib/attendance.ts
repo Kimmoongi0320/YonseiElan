@@ -29,6 +29,12 @@ function kstClosingTimeMs(checkInAtMs: number): number {
   return kstMidnightMs + CHECKIN_CUTOFF_HOUR_KST * 60 * 60 * 1000;
 }
 
+// The UTC instant that today's KST midnight falls on.
+function startOfTodayKstIso(nowMs: number): string {
+  const kstDayIndex = Math.floor((nowMs + KST_OFFSET_MS) / 86_400_000);
+  return new Date(kstDayIndex * 86_400_000 - KST_OFFSET_MS).toISOString();
+}
+
 export async function getOpenRecord(studentId: string): Promise<OpenAttendanceRecord | null> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
@@ -179,4 +185,35 @@ export async function adminCheckOut(studentId: string) {
       checkOutAt: new Date(data.check_out_at as string).getTime(),
     },
   };
+}
+
+// Backs the admin's "present" override for TODAY specifically (set via the
+// per-student attendance calendar): without this, marking a student present
+// only wrote to attendance_overrides, leaving the dashboard's live status —
+// which reads solely from attendance_records — stuck on "미등원" even though
+// the calendar showed them present. Creates a real check-in so the two views
+// agree, unless one already exists for today (open or closed), in which case
+// this is a no-op. No operating-hours cutoff, since this is an explicit
+// admin correction rather than a self-service check-in.
+export async function adminMarkPresentToday(studentId: string): Promise<void> {
+  const now = Date.now();
+
+  const open = await getOpenRecord(studentId);
+  if (open) {
+    if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) return;
+    await closeStaleRecord(open, now);
+  } else {
+    const supabase = getSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("attendance_records")
+      .select("id")
+      .eq("student_id", studentId)
+      .gte("check_in_at", startOfTodayKstIso(now))
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return;
+  }
+
+  await insertCheckInRecord(studentId);
 }

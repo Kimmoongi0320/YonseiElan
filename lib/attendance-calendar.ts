@@ -1,4 +1,5 @@
 import { getSupabaseServerClient } from "./supabase/server";
+import { adminMarkPresentToday } from "./attendance";
 import { TIME_RE, type DayKey } from "./schedule";
 
 export type DayAttendanceStatus = "present" | "absent" | "none";
@@ -328,6 +329,13 @@ export async function setAttendanceOverride(
   );
 
   if (error) throw error;
+
+  // Marking today present should also reflect in the dashboard's live
+  // check-in status, which is derived from attendance_records rather than
+  // this table — see adminMarkPresentToday for why.
+  if (status === "present" && date === kstDateString(Date.now())) {
+    await adminMarkPresentToday(studentId);
+  }
 
   const affectedDates = [date, prior?.makeup_date ?? null, status === "absent" ? makeupDate : null].filter(
     (d): d is string => d != null
