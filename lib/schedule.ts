@@ -28,3 +28,26 @@ export function getTodayDayKeyKst(nowMs: number = Date.now()): DayKey | null {
 export function sortDayKeys(days: DayKey[]): DayKey[] {
   return DAY_KEYS.filter((d) => days.includes(d));
 }
+
+// Per-day class time, keyed by DayKey ("HH:MM" 24h strings). Only days present
+// in a student's class_days are expected to have an entry.
+export type ClassTimes = Partial<Record<DayKey, string>>;
+
+export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function isValidTimeString(value: string): boolean {
+  return TIME_RE.test(value);
+}
+
+// JS getUTCDay() index (0=Sun..6=Sat) -> DayKey. Sunday has no DayKey since
+// the academy holds no Sunday classes.
+const JS_DAY_TO_DAYKEY: (DayKey | null)[] = [null, "mon", "tue", "wed", "thu", "fri", "sat"];
+
+// Resolves a "YYYY-MM-DD" calendar date string to the DayKey it falls on.
+// Parsed as a plain calendar date (via Date.UTC) rather than a KST instant,
+// since the string is already a KST calendar date with no time component.
+export function dayKeyForDateStr(dateStr: string): DayKey | null {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return JS_DAY_TO_DAYKEY[jsDay];
+}

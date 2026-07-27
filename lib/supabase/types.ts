@@ -10,6 +10,7 @@ export type Database = {
           parent_phone_last4: string;
           memo: string | null;
           class_days: string[];
+          class_times: Record<string, string>;
           payment_day: number | null;
           is_active: boolean;
           created_at: string;
@@ -21,6 +22,7 @@ export type Database = {
           parent_phone: string;
           memo?: string | null;
           class_days?: string[];
+          class_times?: Record<string, string>;
           payment_day?: number | null;
           is_active?: boolean;
           created_at?: string;
@@ -32,6 +34,7 @@ export type Database = {
           parent_phone?: string;
           memo?: string | null;
           class_days?: string[];
+          class_times?: Record<string, string>;
           payment_day?: number | null;
           is_active?: boolean;
         };
@@ -72,6 +75,7 @@ export type Database = {
           date: string;
           status: string;
           makeup_date: string | null;
+          makeup_time: string | null;
           class_days_snapshot: string[] | null;
           created_at: string;
         };
@@ -81,12 +85,14 @@ export type Database = {
           date: string;
           status: string;
           makeup_date?: string | null;
+          makeup_time?: string | null;
           class_days_snapshot?: string[] | null;
           created_at?: string;
         };
         Update: {
           status?: string;
           makeup_date?: string | null;
+          makeup_time?: string | null;
           class_days_snapshot?: string[] | null;
         };
         Relationships: [

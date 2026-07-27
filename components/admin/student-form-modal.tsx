@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState, useEffect, useRef, type ChangeEvent } from "react";
+import { useActionState, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Modal } from "@/components/modal";
+import { TimeSelect } from "@/components/admin/time-select";
 import { upsertStudentAction, type StudentFormState } from "@/app/admin/actions";
 import type { AdminStudent } from "@/lib/students";
-import { DAY_KEYS, DAY_LABELS } from "@/lib/schedule";
+import { DAY_KEYS, DAY_LABELS, type ClassTimes, type DayKey } from "@/lib/schedule";
 
 const inputClass =
   "w-full rounded-2xl border border-navy-900/10 bg-white px-4 py-3 text-navy-900 placeholder:text-navy-900/30 focus:outline-none focus:ring-2 focus:ring-navy-900/20";
@@ -41,6 +42,17 @@ export function StudentFormModal({ open, onClose, student }: Props) {
     null
   );
   const wasPending = useRef(false);
+  const [checkedDays, setCheckedDays] = useState<Set<DayKey>>(new Set(student?.classDays ?? []));
+  const classTimes: ClassTimes = student?.classTimes ?? {};
+
+  const toggleDay = (day: DayKey) => {
+    setCheckedDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (wasPending.current && !pending && !state) {
@@ -112,13 +124,25 @@ export function StudentFormModal({ open, onClose, student }: Props) {
                   type="checkbox"
                   name="classDays"
                   value={day}
-                  defaultChecked={student?.classDays.includes(day) ?? false}
+                  checked={checkedDays.has(day)}
+                  onChange={() => toggleDay(day)}
                   className="sr-only"
                 />
                 {DAY_LABELS[day]}
               </label>
             ))}
           </div>
+
+          {checkedDays.size > 0 && (
+            <div className="mt-1 flex flex-col gap-2">
+              {DAY_KEYS.filter((day) => checkedDays.has(day)).map((day) => (
+                <div key={day} className="flex items-center gap-2">
+                  <span className="w-8 shrink-0 text-navy-900/50">{DAY_LABELS[day]}요일</span>
+                  <TimeSelect name={`classTime_${day}`} required defaultValue={classTimes[day] ?? ""} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">

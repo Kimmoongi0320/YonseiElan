@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
+import { TimeSelect } from "@/components/admin/time-select";
 import {
   getStudentAttendanceMonthAction,
   setAttendanceMakeupDateAction,
@@ -9,14 +10,11 @@ import {
 } from "@/app/admin/actions";
 import type { AdminStudentSummary } from "@/lib/students";
 import type { DayAttendanceInfo, DayAttendanceStatus } from "@/lib/attendance-calendar";
-import type { DayKey } from "@/lib/schedule";
+import { dayKeyForDateStr, TIME_RE, type DayKey } from "@/lib/schedule";
 import { formatTime } from "@/lib/format";
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-// JS getUTCDay() index (0=Sun..6=Sat) -> this app's DayKey. Sunday has no
-// DayKey since the academy holds no Sunday classes (see lib/schedule.ts).
-const JS_DAY_TO_DAYKEY: (DayKey | null)[] = [null, "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const STATUS_OPTIONS: { value: DayAttendanceStatus; label: string; activeClassName: string }[] = [
   { value: "present", label: "출석", activeClassName: "bg-emerald-500 text-white" },
@@ -51,6 +49,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     checkInAt: null,
     checkOutAt: null,
     makeupDate: null,
+    makeupTime: null,
     makeupForDates: [],
     makeupCompleted: false,
     targetFulfilled: false,
@@ -85,9 +84,7 @@ function parseDateStr(dateStr: string): { year: number; month: number; day: numb
 // days, so a scheduled makeup there would overlap with an already-planned
 // regular session rather than being an extra, dedicated visit.
 function isRegularClassDay(dateStr: string, classDays: DayKey[]): boolean {
-  const { year, month, day } = parseDateStr(dateStr);
-  const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  const key = JS_DAY_TO_DAYKEY[jsDay];
+  const key = dayKeyForDateStr(dateStr);
   return key != null && classDays.includes(key);
 }
 
@@ -176,16 +173,20 @@ export function AttendanceCalendar({ student }: Props) {
     void withSaving(dateStr, () => setAttendanceStatusAction(student.id, dateStr, action));
   };
 
-  const handleMakeupDateChange = (dateStr: string, makeupDate: string | null) => {
+  const handleMakeupChange = (dateStr: string, makeupDate: string | null, makeupTime: string | null) => {
+    const resolvedTime = makeupDate === null ? null : makeupTime;
+
     setData((prev) => {
       const entry = prev[dateStr];
       if (!entry) return prev;
       // makeupCompleted reflected the OLD makeup date's status — it doesn't
       // carry over to a newly picked date, which hasn't happened yet.
-      return { ...prev, [dateStr]: { ...entry, makeupDate, makeupCompleted: false } };
+      return { ...prev, [dateStr]: { ...entry, makeupDate, makeupTime: resolvedTime, makeupCompleted: false } };
     });
 
-    void withSaving(dateStr, () => setAttendanceMakeupDateAction(student.id, dateStr, makeupDate));
+    if (makeupDate !== null && (resolvedTime === null || !TIME_RE.test(resolvedTime))) return;
+
+    void withSaving(dateStr, () => setAttendanceMakeupDateAction(student.id, dateStr, makeupDate, resolvedTime));
   };
 
   const totalDays = daysInMonth(year, month);
@@ -364,22 +365,32 @@ export function AttendanceCalendar({ student }: Props) {
 
           {selectedInfo.status === "absent" && (
             <label className="flex flex-col gap-1.5 text-xs font-medium text-navy-900/50">
-              보강 날짜
-              <input
-                type="date"
-                min={visibleSelectedDate}
-                value={selectedInfo.makeupDate ?? ""}
-                disabled={selectedSaving}
-                onChange={(e) => {
-                  const value = e.target.value || null;
-                  if (value && value < visibleSelectedDate) return;
-                  handleMakeupDateChange(visibleSelectedDate, value);
-                }}
-                className="w-full max-w-[200px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
-              />
+              보강 날짜/시간
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  min={visibleSelectedDate}
+                  value={selectedInfo.makeupDate ?? ""}
+                  disabled={selectedSaving}
+                  onChange={(e) => {
+                    const value = e.target.value || null;
+                    if (value && value < visibleSelectedDate) return;
+                    handleMakeupChange(visibleSelectedDate, value, selectedInfo.makeupTime);
+                  }}
+                  className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <TimeSelect
+                  value={selectedInfo.makeupTime ?? ""}
+                  disabled={selectedSaving || !selectedInfo.makeupDate}
+                  onChange={(next) => {
+                    handleMakeupChange(visibleSelectedDate, selectedInfo.makeupDate, next || null);
+                  }}
+                />
+              </div>
               {selectedInfo.makeupDate && (
                 <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
-                  {formatMonthDayLabel(selectedInfo.makeupDate)}로{" "}
+                  {formatMonthDayLabel(selectedInfo.makeupDate)}
+                  {selectedInfo.makeupTime ? ` ${selectedInfo.makeupTime}` : ""}로{" "}
                   {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
                 </span>
               )}

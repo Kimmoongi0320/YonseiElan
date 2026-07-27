@@ -13,8 +13,9 @@ import {
   type DayAttendanceInfo,
 } from "@/lib/attendance-calendar";
 import { NOTIFICATION_TEMPLATES } from "@/lib/notifications";
-import { isDayKey, type DayKey } from "@/lib/schedule";
+import { DAY_LABELS, isDayKey, TIME_RE, type ClassTimes, type DayKey } from "@/lib/schedule";
 import { updateAdminPin, verifyAdminPin } from "@/lib/admin-settings";
+import { getMonthScheduleOverrides, type MonthOverrideRow } from "@/lib/schedule-calendar";
 
 const SESSION_COOKIE = "elan_admin_session";
 const PHONE_RE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
@@ -60,6 +61,16 @@ export async function upsertStudentAction(
     return { error: "요일 값이 올바르지 않습니다." };
   }
 
+  const classDays = classDaysRaw as DayKey[];
+  const classTimes: ClassTimes = {};
+  for (const day of classDays) {
+    const time = String(formData.get(`classTime_${day}`) ?? "").trim();
+    if (!TIME_RE.test(time)) {
+      return { error: `${DAY_LABELS[day]}요일 수업 시간을 입력해주세요.` };
+    }
+    classTimes[day] = time;
+  }
+
   let age: number | null = null;
   if (ageRaw) {
     age = Number(ageRaw);
@@ -81,7 +92,8 @@ export async function upsertStudentAction(
     age,
     parentPhone,
     memo,
-    classDays: classDaysRaw as DayKey[],
+    classDays,
+    classTimes,
     paymentDay,
   };
 
@@ -148,7 +160,8 @@ export async function setAttendanceStatusAction(
 export async function setAttendanceMakeupDateAction(
   studentId: string,
   date: string,
-  makeupDate: string | null
+  makeupDate: string | null,
+  makeupTime: string | null
 ): Promise<Record<string, DayAttendanceInfo>> {
   await requireAdminSession();
 
@@ -158,10 +171,23 @@ export async function setAttendanceMakeupDateAction(
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) {
     throw new Error("Invalid makeup date");
   }
+  if (makeupDate !== null && (makeupTime === null || !TIME_RE.test(makeupTime))) {
+    throw new Error("Invalid makeup time");
+  }
 
-  const result = await setAttendanceMakeupDate(studentId, date, makeupDate);
+  const result = await setAttendanceMakeupDate(studentId, date, makeupDate, makeupDate === null ? null : makeupTime);
   revalidatePath("/admin/dashboard");
   return result;
+}
+
+export async function getScheduleMonthOverridesAction(year: number, month: number): Promise<MonthOverrideRow[]> {
+  await requireAdminSession();
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Invalid year/month");
+  }
+
+  return getMonthScheduleOverrides(year, month);
 }
 
 export type NotificationFormState = { error: string } | null;

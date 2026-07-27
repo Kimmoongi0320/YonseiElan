@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from "./supabase/server";
-import type { DayKey } from "./schedule";
+import type { ClassTimes, DayKey } from "./schedule";
 
 export type Student = {
   id: string;
@@ -16,6 +16,7 @@ export type AdminStudent = {
   parentPhone: string;
   memo: string;
   classDays: DayKey[];
+  classTimes: ClassTimes;
   paymentDay: number | null;
   status: AttendanceStatus;
   checkInAt: number | null;
@@ -32,6 +33,7 @@ export type StudentInput = {
   parentPhone: string;
   memo: string;
   classDays: DayKey[];
+  classTimes: ClassTimes;
   paymentDay: number | null;
 };
 
@@ -115,7 +117,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
     supabase
       .from("students")
       .select(
-        "id, name, age, parent_phone, memo, class_days, payment_day, attendance_records(check_in_at, check_out_at)"
+        "id, name, age, parent_phone, memo, class_days, class_times, payment_day, attendance_records(check_in_at, check_out_at)"
       )
       .eq("is_active", true)
       .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
@@ -157,6 +159,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
       parentPhone: s.parent_phone,
       memo: s.memo ?? "",
       classDays: (s.class_days ?? []) as DayKey[],
+      classTimes: (s.class_times ?? {}) as ClassTimes,
       paymentDay: s.payment_day,
       status,
       checkInAt,
@@ -174,6 +177,7 @@ export async function createStudent(input: StudentInput): Promise<void> {
     parent_phone: input.parentPhone,
     memo: input.memo || null,
     class_days: input.classDays,
+    class_times: input.classTimes,
     payment_day: input.paymentDay,
   });
 
@@ -190,6 +194,7 @@ export async function updateStudent(id: string, input: StudentInput): Promise<vo
       parent_phone: input.parentPhone,
       memo: input.memo || null,
       class_days: input.classDays,
+      class_times: input.classTimes,
       payment_day: input.paymentDay,
     })
     .eq("id", id);
@@ -202,4 +207,27 @@ export async function deleteStudent(id: string): Promise<void> {
   const { error } = await supabase.from("students").delete().eq("id", id);
 
   if (error) throw error;
+}
+
+export type ScheduleStudent = Pick<AdminStudent, "id" | "name" | "classDays" | "classTimes">;
+
+// Backs the admin-wide schedule calendar (app/admin/dashboard/schedule) — only
+// the fields needed to derive each day's regular timetable, not the
+// attendance/session-count data listStudentsForAdmin also fetches.
+export async function listActiveStudentsForSchedule(): Promise<ScheduleStudent[]> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, name, class_days, class_times")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    classDays: (s.class_days ?? []) as DayKey[],
+    classTimes: (s.class_times ?? {}) as ClassTimes,
+  }));
 }

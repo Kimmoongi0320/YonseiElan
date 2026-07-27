@@ -29,10 +29,15 @@ alter table students add column if not exists memo text;
 alter table students add column if not exists class_days text[] not null default '{}';
 alter table students add column if not exists payment_day integer check (payment_day between 1 and 31);
 
+-- Migration for pre-existing databases created before class_times was added.
+alter table students add column if not exists class_times jsonb not null default '{}'::jsonb;
+
 comment on column students.parent_phone is '보호자 전화번호 (하이픈 포함 원문, 예: 010-1234-5678)';
 comment on column students.parent_phone_last4 is '키오스크 조회용 뒤 4자리 — parent_phone에서 자동 계산됨';
 comment on column students.memo is '관리자 메모 (특이사항 등)';
 comment on column students.class_days is '수업 요일(월~토) — mon/tue/wed/thu/fri/sat 값의 배열';
+comment on column students.class_times is
+  '요일별 등원 시간 — {"mon":"16:00","wed":"17:00"} 형태로 class_days에 포함된 요일만 키로 가짐. 관리자 일정 달력 표시용.';
 comment on column students.payment_day is '매월 결제일 (1~31) — 출석 달력에 표시용, 선택 입력';
 
 create index if not exists students_parent_phone_last4_idx
@@ -88,14 +93,26 @@ alter table attendance_overrides add column if not exists makeup_date date;
 -- Migration for pre-existing databases created before class_days_snapshot was added.
 alter table attendance_overrides add column if not exists class_days_snapshot text[];
 
+-- Migration for pre-existing databases created before makeup_time was added.
+alter table attendance_overrides add column if not exists makeup_time text;
+
 comment on column attendance_overrides.makeup_date is
   '결석(status=absent)에 대한 보강 예정 날짜. 그 날짜에 학생이 실제로 등원하면 보강완료로 표시됨.';
+
+comment on column attendance_overrides.makeup_time is
+  'makeup_date에 예정된 보강 수업 시간 ("HH:MM"). makeup_date가 null이면 항상 null.';
 
 comment on column attendance_overrides.class_days_snapshot is
   '이 행이 마지막으로 생성/수정된 시점의 students.class_days 값. 등원 요일이 나중에 바뀌어도 "정규 수업일이었는지" 판정은 이 스냅샷을 기준으로 한다. 이 컬럼이 추가되기 전에 만들어진 뒤로 한 번도 다시 수정되지 않은 행은 null.';
 
 create index if not exists attendance_overrides_student_id_idx
   on attendance_overrides (student_id);
+
+-- Backs the admin-wide schedule calendar (app/admin/dashboard/schedule), which
+-- queries across ALL students by date/makeup_date range rather than by
+-- student_id first, unlike every other query against this table.
+create index if not exists attendance_overrides_date_idx
+  on attendance_overrides (date);
 
 -- ---------------------------------------------------------------------------
 -- payment_cycle_start_date / get_student_session_counts — backs the "n회차"
@@ -277,14 +294,4 @@ alter table attendance_records enable row level security;
 alter table attendance_overrides enable row level security;
 alter table app_settings enable row level security;
 
--- ---------------------------------------------------------------------------
--- Sample data (optional) — mirrors the previous in-memory roster so the
--- kiosk keeps working end to end after the migration. Safe to delete.
--- ---------------------------------------------------------------------------
-insert into students (name, parent_phone) values
-  ('김민준', '010-0000-1234'),
-  ('김서준', '010-0000-1234'),
-  ('이서연', '010-0000-5678'),
-  ('박지호', '010-0000-9012'),
-  ('최하윤', '010-0000-3456')
-on conflict do nothing;
+

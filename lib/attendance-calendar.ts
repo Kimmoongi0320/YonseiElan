@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from "./supabase/server";
-import type { DayKey } from "./schedule";
+import { TIME_RE, type DayKey } from "./schedule";
 
 export type DayAttendanceStatus = "present" | "absent" | "none";
 export type AttendanceOverrideStatus = "present" | "absent";
@@ -10,6 +10,9 @@ export type DayAttendanceInfo = {
   checkOutAt: number | null;
   // Set when this (absent) day has a makeup class scheduled on another date.
   makeupDate: string | null;
+  // The scheduled time ("HH:MM") of that makeup class. Null whenever
+  // makeupDate is null.
+  makeupTime: string | null;
   // Non-empty when this day IS the scheduled makeup date for one or more
   // absences on other dates (multiple absences can share one makeup day).
   makeupForDates: string[];
@@ -60,6 +63,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     checkInAt: null,
     checkOutAt: null,
     makeupDate: null,
+    makeupTime: null,
     makeupForDates: [],
     makeupCompleted: false,
     targetFulfilled: false,
@@ -98,7 +102,7 @@ export async function getStudentMonthAttendance(
     // resolve makeup links that cross a month boundary.
     supabase
       .from("attendance_overrides")
-      .select("date, status, makeup_date, class_days_snapshot")
+      .select("date, status, makeup_date, makeup_time, class_days_snapshot")
       .eq("student_id", studentId),
   ]);
 
@@ -161,6 +165,7 @@ export async function getStudentMonthAttendance(
       const entry = ensure(override.date);
       entry.status = override.status as DayAttendanceStatus;
       entry.makeupDate = override.status === "absent" ? override.makeup_date : null;
+      entry.makeupTime = override.status === "absent" ? override.makeup_time : null;
       entry.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
       if (entry.makeupDate) {
         entry.makeupCompleted = isMakeupCompleted(entry.makeupDate);
@@ -209,7 +214,7 @@ export async function getDatesAttendanceInfo(
 
   const { data: overridesData, error: overridesError } = await supabase
     .from("attendance_overrides")
-    .select("date, status, makeup_date, class_days_snapshot")
+    .select("date, status, makeup_date, makeup_time, class_days_snapshot")
     .eq("student_id", studentId);
   if (overridesError) throw overridesError;
   const overrides = overridesData ?? [];
@@ -263,6 +268,7 @@ export async function getDatesAttendanceInfo(
     const entry = ensure(override.date);
     entry.status = override.status as DayAttendanceStatus;
     entry.makeupDate = override.status === "absent" ? override.makeup_date : null;
+    entry.makeupTime = override.status === "absent" ? override.makeup_time : null;
     entry.classDaysSnapshot = override.class_days_snapshot as DayKey[] | null;
     if (entry.makeupDate) {
       entry.makeupCompleted = isMakeupCompleted(entry.makeupDate);
@@ -285,11 +291,16 @@ export async function setAttendanceOverride(
   studentId: string,
   date: string,
   status: AttendanceOverrideStatus,
-  makeupDate: string | null = null
+  makeupDate: string | null = null,
+  makeupTime: string | null = null
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
   if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
+  if (makeupDate !== null && (makeupTime === null || !TIME_RE.test(makeupTime))) {
+    throw new Error("Invalid makeup time");
+  }
+  if (makeupDate === null && makeupTime !== null) throw new Error("Makeup time without a makeup date");
 
   const supabase = getSupabaseServerClient();
 
@@ -306,6 +317,7 @@ export async function setAttendanceOverride(
       date,
       status,
       makeup_date: status === "absent" ? makeupDate : null,
+      makeup_time: status === "absent" ? makeupTime : null,
       // Recorded fresh on every save so this row always reflects the class
       // schedule as of whenever an admin last touched it, not today's live
       // schedule if it's since changed.
@@ -322,17 +334,22 @@ export async function setAttendanceOverride(
   return getDatesAttendanceInfo(studentId, affectedDates);
 }
 
-// Updates only the makeup date on an existing absence override. A no-op if
-// the day isn't currently marked absent (there's nothing to attach a makeup
-// date to).
+// Updates only the makeup date/time on an existing absence override. A no-op
+// if the day isn't currently marked absent (there's nothing to attach a
+// makeup date to). Clearing makeupDate (null) also clears makeupTime.
 export async function setAttendanceMakeupDate(
   studentId: string,
   date: string,
-  makeupDate: string | null
+  makeupDate: string | null,
+  makeupTime: string | null
 ): Promise<Record<string, DayAttendanceInfo>> {
   if (!DATE_RE.test(date)) throw new Error("Invalid date");
   if (makeupDate !== null && !DATE_RE.test(makeupDate)) throw new Error("Invalid makeup date");
   if (makeupDate !== null && makeupDate < date) throw new Error("Makeup date cannot be before the absence date");
+  if (makeupDate !== null && (makeupTime === null || !TIME_RE.test(makeupTime))) {
+    throw new Error("Invalid makeup time");
+  }
+  const resolvedMakeupTime = makeupDate === null ? null : makeupTime;
 
   const supabase = getSupabaseServerClient();
 
@@ -351,7 +368,7 @@ export async function setAttendanceMakeupDate(
 
   const { error } = await supabase
     .from("attendance_overrides")
-    .update({ makeup_date: makeupDate, class_days_snapshot: studentRow.class_days })
+    .update({ makeup_date: makeupDate, makeup_time: resolvedMakeupTime, class_days_snapshot: studentRow.class_days })
     .eq("student_id", studentId)
     .eq("date", date)
     .eq("status", "absent");
