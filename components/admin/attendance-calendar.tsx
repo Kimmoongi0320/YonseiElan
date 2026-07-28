@@ -162,12 +162,12 @@ export function AttendanceCalendar({ student }: Props) {
   const pauseForDate = (dateStr: string) =>
     monthPauses.find((p) => dateStr >= p.pausedFrom && dateStr <= p.pausedUntil);
 
-  // The resolved payment date for a given calendar month: an explicit
-  // override if one's been set for that month, else student.paymentDay
+  // The resolved payment date for a given calendar month: a confirmed date
+  // if one falls in that month (whether admin-set ahead of time or frozen
+  // in automatically once the month passed), else student.paymentDay
   // clamped to that month's day count (so e.g. paymentDay=31 correctly
   // falls back to the 28th/29th in February instead of matching nothing).
-  const cycleMonthKey = (y: number, m: number) => `${y}-${pad2(m)}-01`;
-  const overrideForMonth = (y: number, m: number) => paymentOverrides.find((o) => o.cycleMonth === cycleMonthKey(y, m));
+  const overrideForMonth = (y: number, m: number) => paymentOverrides.find((o) => o.paymentDate.startsWith(`${y}-${pad2(m)}-`));
   const resolvedPaymentDate = (y: number, m: number): string | null => {
     const override = overrideForMonth(y, m);
     if (override) return override.paymentDate;
@@ -182,12 +182,13 @@ export function AttendanceCalendar({ student }: Props) {
     setPaymentOverrideSaving(true);
     setPaymentOverrideError(null);
     try {
-      const result = await setStudentPaymentOverrideAction(student.id, cycleMonthKey(year, month), dateStr);
+      const result = await setStudentPaymentOverrideAction(student.id, year, month, dateStr);
       if ("error" in result) {
         setPaymentOverrideError(result.error);
         return;
       }
-      setPaymentOverrides((prev) => [...prev.filter((o) => o.cycleMonth !== result.override.cycleMonth), result.override]);
+      const resultMonth = result.override.paymentDate.slice(0, 7);
+      setPaymentOverrides((prev) => [...prev.filter((o) => o.paymentDate.slice(0, 7) !== resultMonth), result.override]);
     } catch (error) {
       console.error("Failed to set student payment override", error);
       setPaymentOverrideError(PAYMENT_OVERRIDE_FALLBACK_ERROR);
@@ -585,7 +586,7 @@ export function AttendanceCalendar({ student }: Props) {
                 >
                   {isPaymentDay && (
                     <span
-                      className="absolute right-0.5 top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 text-[6px] font-bold text-white shadow-sm sm:h-3.5 sm:w-3.5 sm:text-[8px]"
+                      className="absolute right-0.5 top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-indigo-500 text-[6px] font-bold text-white shadow-sm sm:h-3.5 sm:w-3.5 sm:text-[8px]"
                       title="결제일"
                     >
                       ₩
@@ -653,11 +654,19 @@ export function AttendanceCalendar({ student }: Props) {
               const isResolvedDay = visibleSelectedDate === resolved;
 
               return (
-                <div className="flex flex-wrap items-center justify-between rounded-xl bg-rose-50/60 px-3 py-2">
-                  <span className="mb-2 text-xs font-medium text-rose-600">
-                    {isResolvedDay
-                      ? `이 달 결제일${override ? " (지정됨)" : ""}`
-                      : `이 달 결제일: ${formatShortMonthDay(resolved ?? "")}`}
+                <div className="flex flex-wrap items-center justify-between rounded-xl bg-indigo-50 px-3 py-2">
+                  <span className="mb-2 flex items-center space-x-1.5 text-xs font-medium text-indigo-600">
+                    <span
+                      className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-500 text-[8px] font-bold text-white"
+                      aria-hidden="true"
+                    >
+                      ₩
+                    </span>
+                    <span>
+                      {isResolvedDay
+                        ? `이 달 결제일${override ? " (지정됨)" : ""}`
+                        : `이 달 결제일: ${formatShortMonthDay(resolved ?? "")}`}
+                    </span>
                   </span>
                   {isResolvedDay && override ? (
                     <button
@@ -673,7 +682,7 @@ export function AttendanceCalendar({ student }: Props) {
                       type="button"
                       disabled={paymentOverrideSaving}
                       onClick={() => submitPaymentOverride(visibleSelectedDate)}
-                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       이 날을 결제일로 지정
                     </button>

@@ -138,19 +138,16 @@ export type Database = {
         Row: {
           id: string;
           student_id: string;
-          cycle_month: string;
           payment_date: string;
           created_at: string;
         };
         Insert: {
           id?: string;
           student_id: string;
-          cycle_month: string;
           payment_date: string;
           created_at?: string;
         };
         Update: {
-          cycle_month?: string;
           payment_date?: string;
         };
         Relationships: [
@@ -188,8 +185,8 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: { student_id: string; session_count: number }[];
       };
-      freeze_student_payment_month: {
-        Args: { p_student_id: string; p_month_end: string };
+      freeze_student_payment_history: {
+        Args: { p_student_id: string; p_ref_date: string };
         Returns: undefined;
       };
     };

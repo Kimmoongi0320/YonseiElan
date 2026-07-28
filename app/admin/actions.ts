@@ -28,7 +28,7 @@ import {
 } from "@/lib/student-pauses";
 import {
   deleteStudentPaymentOverride,
-  freezeStudentPaymentMonthIfEnded,
+  freezeStudentPaymentHistory,
   listStudentPaymentOverrides,
   setStudentPaymentOverride,
   type StudentPaymentOverride,
@@ -222,11 +222,10 @@ export async function getAttendanceCalendarDataAction(
     throw new Error("Invalid year/month");
   }
 
-  // Freezes this month's payment date before reading it back, if it's a
-  // past month that hasn't been frozen yet — a no-op otherwise, so this is
-  // always safe to call up front rather than branching on "is this a past
-  // month" here too (that check already lives in the DB function).
-  await freezeStudentPaymentMonthIfEnded(studentId, year, month);
+  // Catches up any past, not-yet-recorded payment dates before reading them
+  // back — regardless of which month is being viewed, so history never
+  // falls behind. A no-op after the first call for a given day.
+  await freezeStudentPaymentHistory(studentId);
 
   const [attendance, pauses, monthPauses, paymentOverrides] = await Promise.all([
     getStudentMonthAttendance(studentId, year, month),
@@ -271,11 +270,12 @@ export async function deleteStudentPauseAction(studentId: string, pauseId: strin
 
 export async function setStudentPaymentOverrideAction(
   studentId: string,
-  cycleMonth: string,
+  year: number,
+  month: number,
   paymentDate: string
 ): Promise<StudentPaymentOverrideResult> {
   await requireAdminSession();
-  const result = await setStudentPaymentOverride(studentId, cycleMonth, paymentDate);
+  const result = await setStudentPaymentOverride(studentId, year, month, paymentDate);
   revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
   revalidatePath("/admin/dashboard");
   return result;
