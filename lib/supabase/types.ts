@@ -134,6 +134,35 @@ export type Database = {
           },
         ];
       };
+      student_payment_overrides: {
+        Row: {
+          id: string;
+          student_id: string;
+          cycle_month: string;
+          payment_date: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          cycle_month: string;
+          payment_date: string;
+          created_at?: string;
+        };
+        Update: {
+          cycle_month?: string;
+          payment_date?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "student_payment_overrides_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       app_settings: {
         Row: {
           key: string;
@@ -158,6 +187,10 @@ export type Database = {
       get_student_session_counts: {
         Args: Record<PropertyKey, never>;
         Returns: { student_id: string; session_count: number }[];
+      };
+      freeze_student_payment_month: {
+        Args: { p_student_id: string; p_month_end: string };
+        Returns: undefined;
       };
     };
   };

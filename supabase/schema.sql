@@ -136,6 +136,29 @@ comment on table student_pauses is
   '학생별 정지(휴원) 기간. 이 기간의 날짜는 결제 주기 계산, 회차 카운팅, 자동 결석 처리에서 완전히 제외된다.';
 
 -- ---------------------------------------------------------------------------
+-- student_payment_overrides — admin-set actual payment date for one specific
+-- calendar month, overriding the default students.payment_day rule for that
+-- month only. A month with no row here keeps resolving from payment_day as
+-- before; this lets a single cycle's payment date move without redefining
+-- the student's regular payment day going forward.
+-- ---------------------------------------------------------------------------
+create table if not exists student_payment_overrides (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references students (id) on delete cascade,
+  cycle_month date not null,
+  payment_date date not null,
+  created_at timestamptz not null default now(),
+
+  unique (student_id, cycle_month)
+);
+
+create index if not exists student_payment_overrides_student_id_idx
+  on student_payment_overrides (student_id);
+
+comment on table student_payment_overrides is
+  '학생별로 특정 달(cycle_month, 해당 월 1일)의 실제 결제일(payment_date)을 지정. 해당 달에 행이 없으면 students.payment_day 기준 기본 규칙을 그대로 사용한다. 관리자가 직접 지정하는 것 외에, freeze_student_payment_month() 함수가 이미 끝난 달의 달력을 조회할 때마다 그 달의 결제일을 지연 없이 자동으로 이 테이블에 고정시킨다.';
+
+-- ---------------------------------------------------------------------------
 -- payment_cycle_start_date / get_student_session_counts — backs the "n회차"
 -- badge on the admin dashboard's student list. Computed in SQL (one row per
 -- student out) rather than pulling raw attendance rows into the app and
@@ -188,6 +211,8 @@ declare
   v_payment_day integer;
   v_seed date;
   v_start date;
+  v_next_month date;
+  v_override_date date;
   v_naive_next date;
   v_candidate_next date;
   v_overlap integer;
@@ -209,22 +234,35 @@ begin
   v_start := payment_cycle_start_date(v_payment_day, v_seed);
 
   loop
-    v_naive_next := (date_trunc('month', v_start) + interval '1 month')::date
-      + (least(
-          v_payment_day,
-          extract(day from (date_trunc('month', v_start) + interval '2 months - 1 day'))::int
-         ) - 1);
+    v_next_month := (date_trunc('month', v_start) + interval '1 month')::date;
 
-    select coalesce(sum(
-      greatest(0, least(sp.paused_until, v_naive_next - 1) - greatest(sp.paused_from, v_start) + 1)
-    ), 0)
-      into v_overlap
-      from student_pauses sp
-      where sp.student_id = p_student_id
-        and sp.paused_until >= v_start
-        and sp.paused_from < v_naive_next;
+    -- An explicit override for the upcoming month is authoritative — the
+    -- admin set it knowing the real state, so it's used as-is instead of
+    -- being run through the payment_day clamp + pause-delay math below.
+    select payment_date into v_override_date
+      from student_payment_overrides
+      where student_id = p_student_id and cycle_month = v_next_month;
 
-    v_candidate_next := v_naive_next + v_overlap;
+    if v_override_date is not null then
+      v_candidate_next := v_override_date;
+    else
+      v_naive_next := v_next_month
+        + (least(
+            v_payment_day,
+            extract(day from (v_next_month + interval '1 month - 1 day'))::int
+           ) - 1);
+
+      select coalesce(sum(
+        greatest(0, least(sp.paused_until, v_naive_next - 1) - greatest(sp.paused_from, v_start) + 1)
+      ), 0)
+        into v_overlap
+        from student_pauses sp
+        where sp.student_id = p_student_id
+          and sp.paused_until >= v_start
+          and sp.paused_from < v_naive_next;
+
+      v_candidate_next := v_naive_next + v_overlap;
+    end if;
 
     exit when v_candidate_next > ref_date;
     v_start := v_candidate_next;
@@ -237,7 +275,48 @@ end;
 $$;
 
 comment on function student_cycle_boundaries(uuid, date) is
-  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 달만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다.';
+  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 달만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다. 특정 달에 student_payment_overrides 행이 있으면 그 달은 payment_day/정지 지연 계산 대신 지정된 실제 결제일을 그대로 사용한다.';
+
+-- Freezes one calendar month's resolved payment date into
+-- student_payment_overrides, called lazily (from the app) whenever a
+-- student's attendance calendar is fetched, instead of a nightly cron
+-- sweeping every student. A no-op unless p_month_end is a genuinely past
+-- month (KST) with no override yet, so repeat calls (e.g. re-viewing the
+-- same month) cost one cheap read via student_cycle_boundaries and an
+-- on-conflict-do-nothing. p_month_end must be the LAST day of the target
+-- month — student_cycle_boundaries(ref_date) returns whichever cycle ref_date
+-- currently falls in, which is only "that month's payment date" if the
+-- returned cycle_start actually landed inside that same month; a pause long
+-- enough to span multiple calendar months can leave a month with no boundary
+-- of its own at all (nothing happened that month), in which case this
+-- correctly does nothing rather than freezing a stale, earlier month's date
+-- under the wrong cycle_month.
+create or replace function freeze_student_payment_month(p_student_id uuid, p_month_end date)
+returns void
+language plpgsql
+as $$
+declare
+  v_cycle_start date;
+begin
+  if p_month_end >= (now() at time zone 'Asia/Seoul')::date then
+    return;
+  end if;
+
+  select b.cycle_start into v_cycle_start
+  from student_cycle_boundaries(p_student_id, p_month_end) b;
+
+  if v_cycle_start is null or date_trunc('month', v_cycle_start) <> date_trunc('month', p_month_end) then
+    return;
+  end if;
+
+  insert into student_payment_overrides (student_id, cycle_month, payment_date)
+  values (p_student_id, date_trunc('month', v_cycle_start)::date, v_cycle_start)
+  on conflict (student_id, cycle_month) do nothing;
+end;
+$$;
+
+comment on function freeze_student_payment_month(uuid, date) is
+  '이미 끝난 달(p_month_end < 오늘 KST)이면서 그 달에 실제로 결제 주기 경계가 있었던 경우에만, student_cycle_boundaries가 계산한 그 시점의 실제 결제일을 student_payment_overrides에 고정 저장한다. 진행 중/미래 달이거나 정지 기간 때문에 그 달에 경계가 아예 없는 경우는 아무 것도 하지 않는다.';
 
 -- For each active student with a payment_day set: counts distinct dates,
 -- since the most recent payment_day through today (both KST), where the
@@ -405,6 +484,7 @@ alter table students enable row level security;
 alter table attendance_records enable row level security;
 alter table attendance_overrides enable row level security;
 alter table student_pauses enable row level security;
+alter table student_payment_overrides enable row level security;
 alter table app_settings enable row level security;
 
 

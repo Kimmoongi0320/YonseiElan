@@ -8,14 +8,17 @@ import {
   clearAttendanceDayAction,
   createStudentPauseAction,
   deleteStudentPauseAction,
+  deleteStudentPaymentOverrideAction,
   getAttendanceCalendarDataAction,
   setAttendanceMakeupDateAction,
   setAttendanceStatusAction,
+  setStudentPaymentOverrideAction,
   updateStudentPauseEndAction,
 } from "@/app/admin/actions";
 import type { AdminStudentSummary } from "@/lib/students";
 import type { DayAttendanceInfo, DayAttendanceStatus } from "@/lib/attendance-calendar";
 import type { StudentPause } from "@/lib/student-pauses";
+import type { StudentPaymentOverride } from "@/lib/student-payment-overrides";
 import { dayKeyForDateStr, TIME_RE, type DayKey } from "@/lib/schedule";
 import { formatTime } from "@/lib/format";
 
@@ -115,6 +118,10 @@ export function AttendanceCalendar({ student }: Props) {
   const [pauseError, setPauseError] = useState<string | null>(null);
   const [pauseSaving, setPauseSaving] = useState(false);
 
+  const [paymentOverrides, setPaymentOverrides] = useState<StudentPaymentOverride[]>([]);
+  const [paymentOverrideSaving, setPaymentOverrideSaving] = useState(false);
+  const [paymentOverrideError, setPaymentOverrideError] = useState<string | null>(null);
+
   // Bundles the calendar grid's attendance data with both pause views
   // (all-time, for the management panel; month-scoped, for calendar-cell
   // tagging) into one request — they're always needed together on mount,
@@ -126,6 +133,7 @@ export function AttendanceCalendar({ student }: Props) {
         setData(result.attendance);
         setPauses(result.pauses);
         setMonthPauses(result.monthPauses);
+        setPaymentOverrides(result.paymentOverrides);
         setLoadError(false);
       } catch (error) {
         console.error("Failed to load attendance calendar", error);
@@ -154,7 +162,53 @@ export function AttendanceCalendar({ student }: Props) {
   const pauseForDate = (dateStr: string) =>
     monthPauses.find((p) => dateStr >= p.pausedFrom && dateStr <= p.pausedUntil);
 
+  // The resolved payment date for a given calendar month: an explicit
+  // override if one's been set for that month, else student.paymentDay
+  // clamped to that month's day count (so e.g. paymentDay=31 correctly
+  // falls back to the 28th/29th in February instead of matching nothing).
+  const cycleMonthKey = (y: number, m: number) => `${y}-${pad2(m)}-01`;
+  const overrideForMonth = (y: number, m: number) => paymentOverrides.find((o) => o.cycleMonth === cycleMonthKey(y, m));
+  const resolvedPaymentDate = (y: number, m: number): string | null => {
+    const override = overrideForMonth(y, m);
+    if (override) return override.paymentDate;
+    if (student.paymentDay == null) return null;
+    return ymd(y, m, Math.min(student.paymentDay, daysInMonth(y, m)));
+  };
+
   const PAUSE_FALLBACK_ERROR = "정지 처리 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.";
+  const PAYMENT_OVERRIDE_FALLBACK_ERROR = "결제일 변경 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.";
+
+  const submitPaymentOverride = async (dateStr: string) => {
+    setPaymentOverrideSaving(true);
+    setPaymentOverrideError(null);
+    try {
+      const result = await setStudentPaymentOverrideAction(student.id, cycleMonthKey(year, month), dateStr);
+      if ("error" in result) {
+        setPaymentOverrideError(result.error);
+        return;
+      }
+      setPaymentOverrides((prev) => [...prev.filter((o) => o.cycleMonth !== result.override.cycleMonth), result.override]);
+    } catch (error) {
+      console.error("Failed to set student payment override", error);
+      setPaymentOverrideError(PAYMENT_OVERRIDE_FALLBACK_ERROR);
+    } finally {
+      setPaymentOverrideSaving(false);
+    }
+  };
+
+  const clearPaymentOverride = async (overrideId: string) => {
+    setPaymentOverrideSaving(true);
+    setPaymentOverrideError(null);
+    try {
+      await deleteStudentPaymentOverrideAction(student.id, overrideId);
+      setPaymentOverrides((prev) => prev.filter((o) => o.id !== overrideId));
+    } catch (error) {
+      console.error("Failed to delete student payment override", error);
+      setPaymentOverrideError(PAYMENT_OVERRIDE_FALLBACK_ERROR);
+    } finally {
+      setPaymentOverrideSaving(false);
+    }
+  };
 
   const submitNewPause = async () => {
     if (!pauseUntil) {
@@ -496,7 +550,7 @@ export function AttendanceCalendar({ student }: Props) {
               const isToday = year === today.year && month === today.month && day === today.day;
               const saving = savingDates.has(dateStr);
               const isClassDay = isRegularClassDay(dateStr, student.classDays);
-              const isPaymentDay = student.paymentDay === day;
+              const isPaymentDay = dateStr === resolvedPaymentDate(year, month);
               const paused = pauseForDate(dateStr) != null;
 
               const makeupLine =
@@ -590,6 +644,44 @@ export function AttendanceCalendar({ student }: Props) {
               </span>
             )}
           </div>
+
+          {student.paymentDay != null &&
+            (() => {
+              const [selYear, selMonth] = visibleSelectedDate.split("-").map(Number);
+              const resolved = resolvedPaymentDate(selYear, selMonth);
+              const override = overrideForMonth(selYear, selMonth);
+              const isResolvedDay = visibleSelectedDate === resolved;
+
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50/60 px-3 py-2">
+                  <span className="text-xs font-medium text-rose-600">
+                    {isResolvedDay
+                      ? `이 달 결제일${override ? " (지정됨)" : ""}`
+                      : `이 달 결제일: ${formatShortMonthDay(resolved ?? "")}`}
+                  </span>
+                  {isResolvedDay && override ? (
+                    <button
+                      type="button"
+                      disabled={paymentOverrideSaving}
+                      onClick={() => clearPaymentOverride(override.id)}
+                      className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      기본값으로 되돌리기
+                    </button>
+                  ) : !isResolvedDay ? (
+                    <button
+                      type="button"
+                      disabled={paymentOverrideSaving}
+                      onClick={() => submitPaymentOverride(visibleSelectedDate)}
+                      className="rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      이 날을 결제일로 지정
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })()}
+          {paymentOverrideError && <p className="text-xs text-rose-600">{paymentOverrideError}</p>}
 
           {selectedPause ? (
             <div className="flex flex-col space-y-2">

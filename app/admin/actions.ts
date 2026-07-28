@@ -26,6 +26,14 @@ import {
   type StudentPause,
   type StudentPauseResult,
 } from "@/lib/student-pauses";
+import {
+  deleteStudentPaymentOverride,
+  freezeStudentPaymentMonthIfEnded,
+  listStudentPaymentOverrides,
+  setStudentPaymentOverride,
+  type StudentPaymentOverride,
+  type StudentPaymentOverrideResult,
+} from "@/lib/student-payment-overrides";
 
 const SESSION_COOKIE = "elan_admin_session";
 const PHONE_RE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
@@ -206,6 +214,7 @@ export async function getAttendanceCalendarDataAction(
   attendance: Record<string, DayAttendanceInfo>;
   pauses: StudentPause[];
   monthPauses: StudentPause[];
+  paymentOverrides: StudentPaymentOverride[];
 }> {
   await requireAdminSession();
 
@@ -213,13 +222,20 @@ export async function getAttendanceCalendarDataAction(
     throw new Error("Invalid year/month");
   }
 
-  const [attendance, pauses, monthPauses] = await Promise.all([
+  // Freezes this month's payment date before reading it back, if it's a
+  // past month that hasn't been frozen yet — a no-op otherwise, so this is
+  // always safe to call up front rather than branching on "is this a past
+  // month" here too (that check already lives in the DB function).
+  await freezeStudentPaymentMonthIfEnded(studentId, year, month);
+
+  const [attendance, pauses, monthPauses, paymentOverrides] = await Promise.all([
     getStudentMonthAttendance(studentId, year, month),
     listStudentPauses(studentId),
     listStudentPausesForMonth(studentId, year, month),
+    listStudentPaymentOverrides(studentId),
   ]);
 
-  return { attendance, pauses, monthPauses };
+  return { attendance, pauses, monthPauses, paymentOverrides };
 }
 
 export async function createStudentPauseAction(
@@ -249,6 +265,25 @@ export async function updateStudentPauseEndAction(
 export async function deleteStudentPauseAction(studentId: string, pauseId: string): Promise<void> {
   await requireAdminSession();
   await deleteStudentPause(studentId, pauseId);
+  revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
+  revalidatePath("/admin/dashboard");
+}
+
+export async function setStudentPaymentOverrideAction(
+  studentId: string,
+  cycleMonth: string,
+  paymentDate: string
+): Promise<StudentPaymentOverrideResult> {
+  await requireAdminSession();
+  const result = await setStudentPaymentOverride(studentId, cycleMonth, paymentDate);
+  revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
+  revalidatePath("/admin/dashboard");
+  return result;
+}
+
+export async function deleteStudentPaymentOverrideAction(studentId: string, overrideId: string): Promise<void> {
+  await requireAdminSession();
+  await deleteStudentPaymentOverride(studentId, overrideId);
   revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
   revalidatePath("/admin/dashboard");
 }
