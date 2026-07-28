@@ -155,7 +155,7 @@ export function AttendanceFlow() {
         <button
           type="button"
           onClick={() => open("in")}
-          className="group flex flex-col items-center justify-center gap-3 rounded-[2rem] bg-navy-900 px-8 py-8 text-cream-50 shadow-[0_20px_60px_-15px_rgba(15,36,71,0.45)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.98] sm:gap-4 sm:py-14"
+          className="group flex flex-col items-center justify-center space-y-3 rounded-[2rem] bg-navy-900 px-8 py-8 text-cream-50 shadow-[0_20px_60px_-15px_rgba(15,36,71,0.45)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.98] sm:space-y-4 sm:py-14"
         >
           <CheckInIcon className="h-10 w-10 text-gold-400 sm:h-12 sm:w-12" />
           <span className="text-2xl font-bold sm:text-3xl">등원</span>
@@ -164,7 +164,7 @@ export function AttendanceFlow() {
         <button
           type="button"
           onClick={() => open("out")}
-          className="group flex flex-col items-center justify-center gap-3 rounded-[2rem] bg-gold-500 px-8 py-8 text-navy-950 shadow-[0_20px_60px_-15px_rgba(169,122,44,0.4)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.98] sm:gap-4 sm:py-14"
+          className="group flex flex-col items-center justify-center space-y-3 rounded-[2rem] bg-gold-500 px-8 py-8 text-navy-950 shadow-[0_20px_60px_-15px_rgba(169,122,44,0.4)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:scale-[1.02] active:scale-[0.98] sm:space-y-4 sm:py-14"
         >
           <CheckOutIcon className="h-10 w-10 text-navy-900 sm:h-12 sm:w-12" />
           <span className="text-2xl font-bold sm:text-3xl">하원</span>
@@ -173,9 +173,9 @@ export function AttendanceFlow() {
 
       <Modal open={mode !== null} onClose={close}>
         {copy && phase === "phone" && (
-          <div className="flex flex-col items-center gap-6">
+          <div className="flex flex-col items-center space-y-6">
             <h2 className="text-lg font-bold text-navy-900">{copy.title} - 부모님 전화번호 뒤 4자리</h2>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-4">
               {Array.from({ length: PHONE_LENGTH }).map((_, i) => (
                 <span
                   key={i}
@@ -194,15 +194,15 @@ export function AttendanceFlow() {
         )}
 
         {phase === "loading" && (
-          <div className="flex flex-col items-center gap-3 py-10 text-navy-900/60">
+          <div className="flex flex-col items-center space-y-3 py-10 text-navy-900/60">
             <p>조회 중...</p>
           </div>
         )}
 
         {copy && phase === "names" && (
-          <div className="flex flex-col items-center gap-5">
+          <div className="flex flex-col items-center space-y-5">
             <h2 className="text-lg font-bold text-navy-900">학생을 선택해주세요</h2>
-            <div className="flex w-full flex-col gap-3">
+            <div className="flex w-full flex-col space-y-3">
               {students.map((s) => (
                 <button
                   key={s.id}
@@ -211,7 +211,7 @@ export function AttendanceFlow() {
                     setNow(Date.now());
                     selectStudent(s);
                   }}
-                  className="flex items-center gap-3 rounded-2xl border border-navy-900/10 bg-navy-50 px-5 py-4 text-left transition-colors hover:bg-navy-100 active:scale-[0.98]"
+                  className="flex items-center space-x-3 rounded-2xl border border-navy-900/10 bg-navy-50 px-5 py-4 text-left transition-colors hover:bg-navy-100 active:scale-[0.98]"
                 >
                   <UserIcon className="h-6 w-6 text-navy-700" />
                   <span className="text-lg font-semibold text-navy-900">{s.name}</span>
@@ -232,7 +232,7 @@ export function AttendanceFlow() {
         )}
 
         {phase === "empty" && (
-          <div className="flex flex-col items-center gap-4 py-4 text-center">
+          <div className="flex flex-col items-center space-y-4 py-4 text-center">
             <UserIcon className="h-10 w-10 text-navy-900/30" />
             <h2 className="text-lg font-bold text-navy-900">일치하는 학생이 없습니다</h2>
             <p className="text-sm text-navy-900/50">전화번호를 다시 확인해주세요</p>
@@ -250,7 +250,7 @@ export function AttendanceFlow() {
         )}
 
         {copy && selected && phase === "confirm" && (
-          <div className="flex flex-col items-center gap-5 text-center">
+          <div className="flex flex-col items-center space-y-5 text-center">
             <copy.Icon className="h-10 w-10 text-navy-800" />
             <h2 className="text-xl font-bold text-navy-900">{selected.name}님</h2>
 
@@ -278,7 +278,7 @@ export function AttendanceFlow() {
                 <p className="text-sm text-navy-900/50">
                   등원 시각 {status.checkInAt ? formatTime(status.checkInAt) : ""}
                 </p>
-                <div className="flex items-center gap-2 rounded-2xl bg-navy-900/5 px-4 py-3 text-sm text-navy-900/70">
+                <div className="flex items-center space-x-2 rounded-2xl bg-navy-900/5 px-4 py-3 text-sm text-navy-900/70">
                   <ClockIcon className="h-4 w-4 shrink-0" />
                   {selected.name}님은 등원 후 50분이 지나야 하원할 수 있어요. (남은 시간: {formatRemainingMinutes(remainingMs)}분)
                 </div>
@@ -317,7 +317,7 @@ export function AttendanceFlow() {
         )}
 
         {phase === "success" && (
-          <div className="flex flex-col items-center gap-4 py-4 text-center animate-fade-in-up">
+          <div className="flex flex-col items-center space-y-4 py-4 text-center animate-fade-in-up">
             <CheckCircleIcon className="h-14 w-14 text-navy-900" />
             <p className="text-lg font-bold text-navy-900">{successMessage}</p>
             <button

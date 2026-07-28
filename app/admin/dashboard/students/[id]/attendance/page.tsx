@@ -21,9 +21,9 @@ export default async function StudentAttendancePage({
 
   return (
     <div className="flex min-h-[100dvh] flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
+      <div className="mx-auto flex w-full max-w-4xl flex-col space-y-6">
+        <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-3 sm:space-y-0">
+          <div className="flex items-center space-x-2">
             <Link
               href="/admin/dashboard"
               aria-label="목록으로"
@@ -34,7 +34,7 @@ export default async function StudentAttendancePage({
             <h1 className="truncate text-lg font-bold text-navy-900 sm:text-xl">{student.name} 출석 달력</h1>
           </div>
           {student.paymentDay != null && (
-            <span className="inline-flex w-fit items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
+            <span className="inline-flex w-fit items-center space-x-1 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600">
               <span
                 className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-rose-500 text-[8px] font-bold text-white"
                 aria-hidden="true"

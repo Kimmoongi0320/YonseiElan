@@ -54,8 +54,8 @@ export default function AdminAuthPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center gap-8 bg-cream-50 px-6">
-      <div className="flex flex-col items-center gap-3 text-center">
+    <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center space-y-8 bg-cream-50 px-6">
+      <div className="flex flex-col items-center space-y-3 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-navy-900/5 text-navy-900">
           {pending ? (
             <SpinnerIcon className="h-5 w-5 animate-spin" />
@@ -69,7 +69,7 @@ export default function AdminAuthPage() {
         </p>
       </div>
 
-      <div className={`flex items-center gap-4 ${error ? "animate-shake" : ""}`}>
+      <div className={`flex items-center space-x-4 ${error ? "animate-shake" : ""}`}>
         {Array.from({ length: PIN_LENGTH }).map((_, i) => (
           <span
             key={i}
@@ -103,7 +103,7 @@ export default function AdminAuthPage() {
 
       <Link
         href="/"
-        className="mt-2 flex items-center gap-1.5 text-sm text-navy-900/50 transition-colors hover:text-navy-900"
+        className="mt-2 flex items-center space-x-1.5 text-sm text-navy-900/50 transition-colors hover:text-navy-900"
       >
         <ChevronLeftIcon className="h-4 w-4" />
         홈으로

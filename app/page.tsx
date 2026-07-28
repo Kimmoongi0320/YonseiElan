@@ -9,7 +9,7 @@ export default function Home() {
     <div className="relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden bg-cream-50">
       <MusicNotesBackground className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.06]" />
 
-      <header className="relative z-10 flex items-center gap-3 px-6 pt-6 sm:px-10 sm:pt-8">
+      <header className="relative z-10 flex items-center space-x-3 px-6 pt-6 sm:px-10 sm:pt-8">
         <Logo size={40} />
         <div className="leading-tight">
           <p className="text-sm font-semibold tracking-tight text-navy-900">
@@ -21,7 +21,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 sm:gap-10 sm:py-16">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center space-y-6 px-6 py-8 sm:space-y-10 sm:py-16">
         <div className="animate-fade-in-up text-center">
           <p className="text-sm font-medium text-navy-900/50">
             안녕하세요, 연세엘랑 피아노 학원입니다
@@ -37,7 +37,7 @@ export default function Home() {
       <div className="relative z-10 flex justify-end px-4 pb-4 sm:px-6 sm:pb-6">
         <Link
           href="/admin"
-          className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs text-navy-900/35 transition-colors hover:text-navy-900/70"
+          className="flex items-center space-x-1.5 rounded-full px-3 py-2 text-xs text-navy-900/35 transition-colors hover:text-navy-900/70"
         >
           <LockIcon className="h-3.5 w-3.5" />
           관리자

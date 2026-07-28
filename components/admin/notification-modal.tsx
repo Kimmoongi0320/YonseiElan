@@ -35,14 +35,14 @@ export function NotificationModal({ open, onClose, recipients, onSent }: Props) 
 
   return (
     <Modal open={open} onClose={onClose}>
-      <form action={formAction} className="flex flex-col gap-5">
+      <form action={formAction} className="flex flex-col space-y-5">
         <h2 className="text-lg font-bold text-navy-900">알림 보내기</h2>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="-m-1 flex flex-wrap">
           {recipients.map((r) => (
             <span
               key={r.id}
-              className="rounded-full bg-navy-900/5 px-3 py-1 text-xs font-medium text-navy-900"
+              className="m-1 rounded-full bg-navy-900/5 px-3 py-1 text-xs font-medium text-navy-900"
             >
               {r.name}
             </span>
@@ -52,9 +52,9 @@ export function NotificationModal({ open, onClose, recipients, onSent }: Props) 
           ))}
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col space-y-1.5">
           <span className="text-sm font-medium text-navy-900/70">템플릿 선택</span>
-          <div className="flex flex-wrap gap-2">
+          <div className="-m-1 flex flex-wrap">
             {NOTIFICATION_TEMPLATES.map((t) => (
               <button
                 key={t.key}
@@ -63,7 +63,7 @@ export function NotificationModal({ open, onClose, recipients, onSent }: Props) 
                   setTemplateKey(t.key);
                   setMessage(t.message);
                 }}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`m-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                   templateKey === t.key
                     ? "border-navy-900 bg-navy-900 text-cream-50"
                     : "border-navy-900/10 bg-white text-navy-900/70 hover:bg-navy-900/5"
@@ -77,7 +77,7 @@ export function NotificationModal({ open, onClose, recipients, onSent }: Props) 
 
         <input type="hidden" name="templateKey" value={templateKey} />
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           메시지 내용
           <textarea
             name="message"

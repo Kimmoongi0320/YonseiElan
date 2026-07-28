@@ -15,8 +15,8 @@ export default async function AdminSchedulePage() {
 
   return (
     <div className="flex min-h-[100dvh] flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-        <div className="flex items-center gap-2">
+      <div className="mx-auto flex w-full max-w-4xl flex-col space-y-6">
+        <div className="flex items-center space-x-2">
           <Link
             href="/admin/dashboard"
             aria-label="목록으로"

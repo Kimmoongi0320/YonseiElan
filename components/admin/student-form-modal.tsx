@@ -64,14 +64,14 @@ export function StudentFormModal({ open, onClose, student }: Props) {
 
   return (
     <Modal open={open} onClose={onClose}>
-      <form action={formAction} className="flex flex-col gap-5">
+      <form action={formAction} className="flex flex-col space-y-5">
         <h2 className="text-lg font-bold text-navy-900">
           {student ? "학생 정보 수정" : "학생 등록"}
         </h2>
 
         <input type="hidden" name="id" value={student?.id ?? ""} />
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           이름
           <input
             type="text"
@@ -83,7 +83,7 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           />
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           나이
           <input
             type="number"
@@ -96,7 +96,7 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           />
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           부모님 전화번호
           <input
             type="tel"
@@ -112,13 +112,13 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           />
         </label>
 
-        <div className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <div className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           수업 요일
-          <div className="flex flex-wrap gap-2">
+          <div className="-m-1 flex flex-wrap">
             {DAY_KEYS.map((day) => (
               <label
                 key={day}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-navy-900/10 bg-white text-sm font-semibold text-navy-900/60 transition-colors has-[:checked]:border-navy-900 has-[:checked]:bg-navy-900 has-[:checked]:text-cream-50"
+                className="m-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-navy-900/10 bg-white text-sm font-semibold text-navy-900/60 transition-colors has-[:checked]:border-navy-900 has-[:checked]:bg-navy-900 has-[:checked]:text-cream-50"
               >
                 <input
                   type="checkbox"
@@ -134,9 +134,9 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           </div>
 
           {checkedDays.size > 0 && (
-            <div className="mt-1 flex flex-col gap-2">
+            <div className="mt-1 flex flex-col space-y-2">
               {DAY_KEYS.filter((day) => checkedDays.has(day)).map((day) => (
-                <div key={day} className="flex items-center gap-2">
+                <div key={day} className="flex items-center space-x-2">
                   <span className="w-8 shrink-0 text-navy-900/50">{DAY_LABELS[day]}요일</span>
                   <TimeSelect name={`classTime_${day}`} required defaultValue={classTimes[day] ?? ""} />
                 </div>
@@ -145,7 +145,7 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           )}
         </div>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           결제일
           <select
             name="paymentDay"
@@ -161,7 +161,7 @@ export function StudentFormModal({ open, onClose, student }: Props) {
           </select>
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           메모
           <textarea
             name="memo"

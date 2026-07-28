@@ -142,8 +142,8 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
   };
 
   return (
-    <div className="mt-8 flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-8 flex flex-col space-y-6">
+      <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-3 sm:space-y-0">
         <div className="relative flex-1 sm:max-w-xs">
           <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-900/30" />
           <input
@@ -155,12 +155,12 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex space-x-2">
           <button
             type="button"
             disabled={selected.size === 0}
             onClick={handleBulkWithdraw}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gold-500 px-4 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
+            className="flex flex-1 items-center justify-center space-x-1.5 rounded-full bg-gold-500 px-4 py-2.5 text-sm font-semibold text-navy-950 transition-colors hover:bg-gold-600 disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
           >
             <ArchiveIcon className="h-4 w-4 shrink-0" />
             <span className="truncate">전체 하원 처리{selected.size > 0 ? ` (${selected.size})` : ""}</span>
@@ -168,7 +168,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
           <button
             type="button"
             onClick={openCreate}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-navy-900 px-4 py-2.5 text-sm font-semibold text-cream-50 transition-colors hover:bg-navy-800 sm:flex-none"
+            className="flex flex-1 items-center justify-center space-x-1.5 rounded-full bg-navy-900 px-4 py-2.5 text-sm font-semibold text-cream-50 transition-colors hover:bg-navy-800 sm:flex-none"
           >
             <PlusIcon className="h-4 w-4 shrink-0" />
             학생 등록
@@ -176,15 +176,15 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl bg-white/60 p-4 sm:flex-row sm:items-center sm:gap-5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="pr-1 text-xs font-semibold text-navy-900/35">상태</span>
+      <div className="flex flex-col space-y-3 rounded-2xl bg-white/60 p-4 sm:flex-row sm:items-center sm:space-x-5 sm:space-y-0">
+        <div className="flex flex-wrap items-center -m-[3px]">
+          <span className="m-[3px] pr-1 text-xs font-semibold text-navy-900/35">상태</span>
           {FILTERS.map((f) => (
             <button
               key={f.value}
               type="button"
               onClick={() => setStatusFilter(f.value)}
-              className={`rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
+              className={`m-[3px] rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
                 statusFilter === f.value
                   ? "bg-navy-900 text-cream-50"
                   : "bg-navy-900/5 text-navy-900/60 hover:bg-navy-900/10"
@@ -197,12 +197,12 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
 
         <div className="hidden h-6 w-px bg-navy-900/10 sm:block" />
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="pr-1 text-xs font-semibold text-navy-900/35">요일</span>
+        <div className="flex flex-wrap items-center -m-[3px]">
+          <span className="m-[3px] pr-1 text-xs font-semibold text-navy-900/35">요일</span>
           <button
             type="button"
             onClick={() => setDayFilter("all")}
-            className={`rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
+            className={`m-[3px] rounded-full px-3.5 py-2 text-xs font-medium transition-colors ${
               dayFilter === "all"
                 ? "bg-navy-900 text-cream-50"
                 : "bg-navy-900/5 text-navy-900/60 hover:bg-navy-900/10"
@@ -215,7 +215,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
               key={day}
               type="button"
               onClick={() => setDayFilter((prev) => (prev === day ? "all" : day))}
-              className={`relative h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
+              className={`relative m-[3px] h-9 w-9 rounded-full text-xs font-semibold transition-colors ${
                 dayFilter === day
                   ? "bg-gold-500 text-navy-950"
                   : "bg-navy-900/5 text-navy-900/60 hover:bg-navy-900/10"
@@ -236,7 +236,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
       </div>
 
       {filtered.length > 0 && (
-        <label className="flex items-center gap-2 text-xs font-medium text-navy-900/50 sm:hidden">
+        <label className="flex items-center space-x-2 text-xs font-medium text-navy-900/50 sm:hidden">
           <input
             type="checkbox"
             checked={allFilteredSelected}
@@ -248,14 +248,14 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
         </label>
       )}
 
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col space-y-3 sm:hidden">
         {filtered.map((s) => (
           <div
             key={s.id}
             className="rounded-2xl bg-white p-4 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)]"
           >
-            <div className="flex items-start justify-between gap-3">
-              <label className="flex min-w-0 items-start gap-3">
+            <div className="flex items-start justify-between space-x-3">
+              <label className="flex min-w-0 items-start space-x-3">
                 <input
                   type="checkbox"
                   checked={selected.has(s.id)}
@@ -275,8 +275,8 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   </span>
                 </span>
               </label>
-              <span className="flex flex-col items-end gap-1">
-                <span className="flex items-center gap-1.5">
+              <span className="flex flex-col items-end space-y-1">
+                <span className="flex items-center space-x-1.5">
                   <StatusBadge status={s.status} />
                   <SessionCountBadge sessionCount={s.sessionCount} />
                 </span>
@@ -284,15 +284,15 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
               </span>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2 border-t border-navy-900/5 pt-3">
+            <div className="mt-3 flex items-center justify-between space-x-2 border-t border-navy-900/5 pt-3">
               <a
                 href={telHref(s.parentPhone)}
-                className="flex min-w-0 items-center gap-1.5 text-sm text-navy-900/60"
+                className="flex min-w-0 items-center space-x-1.5 text-sm text-navy-900/60"
               >
                 <PhoneIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{s.parentPhone}</span>
               </a>
-              <div className="flex shrink-0 items-center gap-1">
+              <div className="flex shrink-0 items-center space-x-1">
                 {s.status === "checked_in" && (
                   <button
                     type="button"
@@ -382,7 +382,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                     : "-"}
                 </td>
                 <td className="px-3 py-4 text-navy-900/60">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center space-x-2">
                     {s.parentPhone}
                     <a
                       href={telHref(s.parentPhone)}
@@ -394,7 +394,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   </div>
                 </td>
                 <td className="px-3 py-4">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center space-x-1.5">
                     <StatusBadge status={s.status} />
                     <SessionCountBadge sessionCount={s.sessionCount} />
                   </div>
@@ -403,7 +403,7 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
                   <AttendanceTimes checkInAt={s.checkInAt} checkOutAt={s.checkOutAt} />
                 </td>
                 <td className="px-3 py-4">
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end space-x-1">
                     {s.status === "checked_in" && (
                       <button
                         type="button"

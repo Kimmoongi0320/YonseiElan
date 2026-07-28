@@ -283,7 +283,7 @@ export function ScheduleCalendar({ students }: Props) {
   const selectedEntries = selectedDate ? entriesForDate(selectedDate) : [];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col space-y-4">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -337,7 +337,7 @@ export function ScheduleCalendar({ students }: Props) {
                   setDetailEntries(null);
                 }}
                 aria-label={`${month}월 ${day}일 타임테이블 보기`}
-                className={`relative flex min-h-[96px] flex-col items-start gap-0.5 rounded-lg border border-navy-900/10 bg-white p-1 text-left text-[10px] leading-tight transition-colors hover:brightness-95 sm:min-h-[130px] sm:gap-1 sm:rounded-xl sm:p-2 sm:text-xs ${
+                className={`relative flex min-h-[96px] flex-col items-start space-y-0.5 rounded-lg border border-navy-900/10 bg-white p-1 text-left text-[10px] leading-tight transition-colors hover:brightness-95 sm:min-h-[130px] sm:space-y-1 sm:rounded-xl sm:p-2 sm:text-xs ${
                   isToday ? "ring-2 ring-gold-500 ring-offset-1" : ""
                 }`}
               >
@@ -374,7 +374,7 @@ export function ScheduleCalendar({ students }: Props) {
             const totalHeight = (timetable.endHour - timetable.startHour) * HOUR_HEIGHT;
 
             return (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col space-y-4">
                 <h2 className="text-lg font-bold text-navy-900">{formatMonthDayLabel(selectedDate)} 타임테이블</h2>
 
                 {selectedEntries.length === 0 ? (
@@ -418,7 +418,7 @@ export function ScheduleCalendar({ students }: Props) {
                             }}
                           >
                             <div
-                              className={`flex h-full flex-col justify-center gap-0.5 overflow-hidden rounded-lg border px-2 py-1 text-left text-[11px] leading-tight ${
+                              className={`flex h-full flex-col justify-center space-y-0.5 overflow-hidden rounded-lg border px-2 py-1 text-left text-[11px] leading-tight ${
                                 entry.isAbsent
                                   ? "border-rose-200 bg-rose-50"
                                   : entry.kind === "makeup"
@@ -447,7 +447,7 @@ export function ScheduleCalendar({ students }: Props) {
                               width: `${block.width}%`,
                             }}
                           >
-                            <div className="flex h-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-navy-900/10 bg-navy-900/5 px-2 py-1 text-[11px] font-semibold leading-tight text-navy-900/60">
+                            <div className="flex h-full flex-col items-center justify-center space-y-0.5 overflow-hidden rounded-lg border border-navy-900/10 bg-navy-900/5 px-2 py-1 text-[11px] font-semibold leading-tight text-navy-900/60">
                               +{block.entries.length}명
                             </div>
                           </button>
@@ -456,7 +456,7 @@ export function ScheduleCalendar({ students }: Props) {
                     </div>
 
                     {timetable.untimed.length > 0 && (
-                      <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-col space-y-1.5">
                         <p className="text-xs font-medium text-navy-900/40">시간 미정</p>
                         {timetable.untimed.map((entry, i) => (
                           <div
@@ -465,7 +465,7 @@ export function ScheduleCalendar({ students }: Props) {
                               entry.isAbsent ? "border-rose-200 bg-rose-50" : "border-navy-900/10 bg-white"
                             }`}
                           >
-                            <span className="flex items-center gap-2">
+                            <span className="flex items-center space-x-2">
                               <span className="font-semibold text-navy-900">{entry.name}</span>
                               {entry.kind === "makeup" && (
                                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
@@ -492,7 +492,7 @@ export function ScheduleCalendar({ students }: Props) {
 
       {detailEntries && (
         <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center px-4 pb-[max(env(safe-area-inset-bottom),1rem)]">
-          <div className="flex w-full max-w-lg flex-col gap-2 rounded-t-2xl border border-navy-900/10 bg-white p-4 shadow-[0_-15px_40px_-20px_rgba(10,23,48,0.35)]">
+          <div className="flex w-full max-w-lg flex-col space-y-2 rounded-t-2xl border border-navy-900/10 bg-white p-4 shadow-[0_-15px_40px_-20px_rgba(10,23,48,0.35)]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-navy-900/40">선택한 학생</span>
               <button
@@ -504,13 +504,13 @@ export function ScheduleCalendar({ students }: Props) {
                 <XIcon className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="flex max-h-[40vh] flex-col gap-2 overflow-y-auto">
+            <div className="flex max-h-[40vh] flex-col space-y-2 overflow-y-auto">
               {detailEntries.map((entry, i) => (
                 <div
                   key={`${entry.studentId}-${entry.kind}-detail-${i}`}
-                  className="flex items-center justify-between gap-2 rounded-xl bg-navy-50/60 px-3 py-2 text-sm"
+                  className="flex items-center justify-between space-x-2 rounded-xl bg-navy-50/60 px-3 py-2 text-sm"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex min-w-0 items-center space-x-2">
                     <span className="truncate font-semibold text-navy-900">{entry.name}</span>
                     {entry.kind === "makeup" && (
                       <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">

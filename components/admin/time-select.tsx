@@ -50,7 +50,7 @@ export function TimeSelect({ name, value, defaultValue, onChange, required, disa
     "rounded-2xl border border-navy-900/10 bg-white px-2 py-2 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-navy-900/20 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center space-x-1">
       <select
         aria-label="시"
         value={hour}

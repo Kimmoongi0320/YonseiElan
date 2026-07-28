@@ -334,16 +334,16 @@ export function AttendanceCalendar({ student }: Props) {
   };
 
   const renderPauseRow = (pause: StudentPause, muted: boolean) => (
-    <div key={pause.id} className="flex flex-wrap items-center justify-between gap-2">
+    <div key={pause.id} className="-m-1 flex flex-wrap items-center justify-between">
       <span
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+        className={`m-1 inline-flex items-center space-x-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
           muted ? "bg-navy-900/5 text-navy-900/40" : "bg-slate-100 text-slate-600"
         }`}
       >
         정지 {formatShortMonthDay(pause.pausedFrom)} ~ {formatShortMonthDay(pause.pausedUntil)}
       </span>
       {editingResumeDate === pause.id ? (
-        <div className="flex items-center gap-2">
+        <div className="m-1 flex items-center space-x-2">
           <input
             type="date"
             defaultValue={pause.pausedUntil}
@@ -373,7 +373,7 @@ export function AttendanceCalendar({ student }: Props) {
           </button>
         </div>
       ) : (
-        <div className="flex items-center gap-2">
+        <div className="m-1 flex items-center space-x-2">
           <button
             type="button"
             disabled={pauseSaving}
@@ -415,7 +415,7 @@ export function AttendanceCalendar({ student }: Props) {
   const selectedPause = visibleSelectedDate ? pauseForDate(visibleSelectedDate) : undefined;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col space-y-4">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -444,12 +444,12 @@ export function AttendanceCalendar({ student }: Props) {
         </p>
       )}
 
-      <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)]">
+      <div className="flex flex-col space-y-2 rounded-2xl bg-white p-4 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)]">
         {upcomingPauses.map((pause) => renderPauseRow(pause, false))}
 
         {pauseFormOpen ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-navy-900/50">
+          <div className="-m-1 flex flex-wrap items-center">
+            <label className="m-1 flex items-center space-x-1.5 text-xs font-medium text-navy-900/50">
               시작일
               <input
                 type="date"
@@ -459,7 +459,7 @@ export function AttendanceCalendar({ student }: Props) {
                 className="rounded-xl border border-navy-900/10 bg-white px-3 py-1.5 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </label>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-navy-900/50">
+            <label className="m-1 flex items-center space-x-1.5 text-xs font-medium text-navy-900/50">
               재개일
               <input
                 type="date"
@@ -474,7 +474,7 @@ export function AttendanceCalendar({ student }: Props) {
               type="button"
               disabled={pauseSaving}
               onClick={submitNewPause}
-              className="rounded-xl bg-navy-900 px-3 py-1.5 text-xs font-semibold text-cream-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="m-1 rounded-xl bg-navy-900 px-3 py-1.5 text-xs font-semibold text-cream-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               등록
             </button>
@@ -485,7 +485,7 @@ export function AttendanceCalendar({ student }: Props) {
                 setPauseFormOpen(false);
                 setPauseError(null);
               }}
-              className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/50 hover:bg-navy-900/5"
+              className="m-1 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/50 hover:bg-navy-900/5"
             >
               취소
             </button>
@@ -551,7 +551,7 @@ export function AttendanceCalendar({ student }: Props) {
                   type="button"
                   onClick={() => setSelectedDate(dateStr)}
                   aria-label={`${month}월 ${day}일 선택`}
-                  className={`relative flex min-h-[96px] flex-col items-start gap-0.5 rounded-lg border p-1 text-left text-[10px] leading-tight transition-colors hover:brightness-95 sm:min-h-[130px] sm:gap-1 sm:rounded-xl sm:p-2 sm:text-xs ${statusClassName} ${
+                  className={`relative flex min-h-[96px] flex-col items-start space-y-0.5 rounded-lg border p-1 text-left text-[10px] leading-tight transition-colors hover:brightness-95 sm:min-h-[130px] sm:space-y-1 sm:rounded-xl sm:p-2 sm:text-xs ${statusClassName} ${
                     isToday ? "ring-2 ring-gold-500 ring-offset-1" : ""
                   } ${saving ? "opacity-50" : ""}`}
                 >
@@ -597,7 +597,7 @@ export function AttendanceCalendar({ student }: Props) {
         </div>
 
       {visibleSelectedDate && selectedInfo && (
-        <div className="relative flex flex-col gap-3 rounded-2xl bg-white p-5 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)] sm:p-6">
+        <div className="relative flex flex-col space-y-3 rounded-2xl bg-white p-5 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)] sm:p-6">
           <button
             type="button"
             onClick={() => setSelectedDate(null)}
@@ -618,13 +618,13 @@ export function AttendanceCalendar({ student }: Props) {
           </div>
 
           {selectedPause ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col space-y-2">
               <p className="text-xs text-navy-900/50">이 기간은 출석/결석 관리 대상이 아니에요.</p>
               {renderPauseRow(selectedPause, false)}
             </div>
           ) : (
             <>
-          <div className="flex gap-2">
+          <div className="flex space-x-2">
             {STATUS_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -643,9 +643,9 @@ export function AttendanceCalendar({ student }: Props) {
           </div>
 
           {selectedInfo.status === "absent" && (
-            <label className="flex flex-col gap-1.5 text-xs font-medium text-navy-900/50">
+            <label className="flex flex-col space-y-1.5 text-xs font-medium text-navy-900/50">
               보강 날짜/시간
-              <div className="flex gap-2">
+              <div className="flex space-x-2">
                 <input
                   type="date"
                   value={selectedInfo.makeupDate ?? ""}
@@ -686,11 +686,11 @@ export function AttendanceCalendar({ student }: Props) {
           )}
 
           {selectedInfo.makeupForDates.length > 0 && (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col space-y-1">
               <p className="text-xs text-navy-900/50">
                 이 날은 아래 결석에 대한 보강일이에요 — {selectedInfo.targetFulfilled ? "보강완료" : "보강예정"}
               </p>
-              <ul className="flex flex-col gap-0.5 text-xs text-navy-900/50">
+              <ul className="flex flex-col space-y-0.5 text-xs text-navy-900/50">
                 {selectedInfo.makeupForDates.map((m) => (
                   <li key={m.date}>
                     {formatMonthDayLabel(m.date)} 결석 → {m.time ?? "시간 미정"} 보강

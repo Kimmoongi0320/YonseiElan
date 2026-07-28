@@ -35,10 +35,10 @@ export function ChangePinButton() {
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)}>
-        <form ref={formRef} action={formAction} className="flex flex-col gap-5">
+        <form ref={formRef} action={formAction} className="flex flex-col space-y-5">
           <h2 className="text-lg font-bold text-navy-900">관리자 비밀번호 변경</h2>
 
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+          <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
             현재 비밀번호
             <input
               type="password"
@@ -51,7 +51,7 @@ export function ChangePinButton() {
             />
           </label>
 
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+          <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
             새 비밀번호
             <input
               type="password"
@@ -64,7 +64,7 @@ export function ChangePinButton() {
             />
           </label>
 
-          <label className="flex flex-col gap-1.5 text-sm font-medium text-navy-900/70">
+          <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
             새 비밀번호 확인
             <input
               type="password"

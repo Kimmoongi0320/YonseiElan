@@ -15,10 +15,10 @@ type Props = {
 export function ConfirmModal({ open, title, message, confirmLabel, pending, onConfirm, onClose }: Props) {
   return (
     <Modal open={open} onClose={onClose}>
-      <div className="flex flex-col items-center gap-5 text-center">
+      <div className="flex flex-col items-center space-y-5 text-center">
         <h2 className="text-lg font-bold text-navy-900">{title}</h2>
         <p className="text-sm text-navy-900/60">{message}</p>
-        <div className="flex w-full gap-3">
+        <div className="flex w-full space-x-3">
           <button
             type="button"
             onClick={onClose}
