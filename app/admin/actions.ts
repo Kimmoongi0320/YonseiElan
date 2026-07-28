@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createStudent, deleteStudent, findStudentById, updateStudent } from "@/lib/students";
 import { adminCheckOut } from "@/lib/attendance";
 import {
+  clearAttendanceDayRecords,
   clearAttendanceOverride,
   getStudentMonthAttendance,
   setAttendanceMakeupDate,
@@ -153,6 +154,25 @@ export async function setAttendanceStatusAction(
       ? await clearAttendanceOverride(studentId, date)
       : await setAttendanceOverride(studentId, date, status);
 
+  revalidatePath("/admin/dashboard");
+  return result;
+}
+
+// Used when the day being reset to "기록없음" already has a real check-in —
+// clearing just the override would leave that check-in behind and the day
+// would keep reading back as "present". Only reachable after the admin
+// confirms a warning in the UI, since this permanently deletes the check-in.
+export async function clearAttendanceDayAction(
+  studentId: string,
+  date: string
+): Promise<Record<string, DayAttendanceInfo>> {
+  await requireAdminSession();
+
+  if (!DATE_RE.test(date)) {
+    throw new Error("Invalid date");
+  }
+
+  const result = await clearAttendanceDayRecords(studentId, date);
   revalidatePath("/admin/dashboard");
   return result;
 }

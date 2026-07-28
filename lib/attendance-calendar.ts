@@ -410,3 +410,43 @@ export async function clearAttendanceOverride(
   const affectedDates = [date, deleted?.makeup_date ?? null].filter((d): d is string => d != null);
   return getDatesAttendanceInfo(studentId, affectedDates);
 }
+
+// Forces a day to true "no record" state by deleting its actual check-in
+// record(s) as well as any admin override. Clearing just the override (as
+// clearAttendanceOverride does) leaves a real check-in behind, so the day's
+// status would keep reading back as "present" — this is for when the admin
+// has explicitly confirmed they want that check-in gone too.
+export async function clearAttendanceDayRecords(
+  studentId: string,
+  date: string
+): Promise<Record<string, DayAttendanceInfo>> {
+  if (!DATE_RE.test(date)) throw new Error("Invalid date");
+
+  const { year, month, day } = parseDateStr(date);
+  const dayStart = kstMidnightIso(year, month, day);
+  const dayEnd = kstMidnightIso(year, month, day + 1);
+
+  const supabase = getSupabaseServerClient();
+
+  const [{ error: recordsError }, { data: deletedOverride, error: overrideError }] = await Promise.all([
+    supabase
+      .from("attendance_records")
+      .delete()
+      .eq("student_id", studentId)
+      .gte("check_in_at", dayStart)
+      .lt("check_in_at", dayEnd),
+    supabase
+      .from("attendance_overrides")
+      .delete()
+      .eq("student_id", studentId)
+      .eq("date", date)
+      .select("makeup_date")
+      .maybeSingle(),
+  ]);
+
+  if (recordsError) throw recordsError;
+  if (overrideError) throw overrideError;
+
+  const affectedDates = [date, deletedOverride?.makeup_date ?? null].filter((d): d is string => d != null);
+  return getDatesAttendanceInfo(studentId, affectedDates);
+}

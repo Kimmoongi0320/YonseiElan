@@ -3,7 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { TimeSelect } from "@/components/admin/time-select";
+import { ConfirmModal } from "@/components/admin/confirm-modal";
 import {
+  clearAttendanceDayAction,
   getStudentAttendanceMonthAction,
   setAttendanceMakeupDateAction,
   setAttendanceStatusAction,
@@ -97,6 +99,8 @@ export function AttendanceCalendar({ student }: Props) {
   const [loading, startLoadingTransition] = useTransition();
   const [savingDates, setSavingDates] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [clearWarningDate, setClearWarningDate] = useState<string | null>(null);
+  const [clearWarningPending, setClearWarningPending] = useState(false);
 
   const fetchMonth = (studentId: string, y: number, m: number) => {
     startLoadingTransition(async () => {
@@ -160,6 +164,15 @@ export function AttendanceCalendar({ student }: Props) {
   };
 
   const handleStatusChange = (dateStr: string, status: DayAttendanceStatus) => {
+    // A real check-in record on this day would keep re-deriving "present"
+    // even after the override is cleared, so clearing the override alone
+    // can't produce "기록없음" here — the check-in itself has to go, which
+    // needs the admin's explicit confirmation first.
+    if (status === "none" && data[dateStr]?.checkInAt != null) {
+      setClearWarningDate(dateStr);
+      return;
+    }
+
     setData((prev) => {
       const entry = prev[dateStr] ?? emptyDayInfo();
       return {
@@ -170,6 +183,18 @@ export function AttendanceCalendar({ student }: Props) {
 
     const action: "present" | "absent" | "auto" = status === "none" ? "auto" : status;
     void withSaving(dateStr, () => setAttendanceStatusAction(student.id, dateStr, action));
+  };
+
+  const confirmClearAttendanceDay = async () => {
+    const dateStr = clearWarningDate;
+    if (!dateStr) return;
+    setClearWarningPending(true);
+    try {
+      await withSaving(dateStr, () => clearAttendanceDayAction(student.id, dateStr));
+      setClearWarningDate(null);
+    } finally {
+      setClearWarningPending(false);
+    }
   };
 
   const handleMakeupChange = (dateStr: string, makeupDate: string | null, makeupTime: string | null) => {
@@ -418,6 +443,20 @@ export function AttendanceCalendar({ student }: Props) {
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={clearWarningDate !== null}
+        title="등원 기록 삭제"
+        message={
+          clearWarningDate
+            ? `${formatMonthDayLabel(clearWarningDate)}에 이미 등원 기록이 있어요. 기록없음으로 바꾸면 그 날의 등원/하원 기록이 모두 삭제되며 복구할 수 없어요. 계속할까요?`
+            : ""
+        }
+        confirmLabel="삭제하고 변경"
+        pending={clearWarningPending}
+        onConfirm={confirmClearAttendanceDay}
+        onClose={() => setClearWarningDate(null)}
+      />
     </div>
   );
 }
