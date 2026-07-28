@@ -115,22 +115,29 @@ export function StudentFormModal({ open, onClose, student }: Props) {
         <div className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
           수업 요일
           <div className="-m-1 flex flex-wrap">
-            {DAY_KEYS.map((day) => (
-              <label
-                key={day}
-                className="m-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-navy-900/10 bg-white text-sm font-semibold text-navy-900/60 transition-colors has-[:checked]:border-navy-900 has-[:checked]:bg-navy-900 has-[:checked]:text-cream-50"
-              >
-                <input
-                  type="checkbox"
-                  name="classDays"
-                  value={day}
-                  checked={checkedDays.has(day)}
-                  onChange={() => toggleDay(day)}
-                  className="sr-only"
-                />
-                {DAY_LABELS[day]}
-              </label>
-            ))}
+            {DAY_KEYS.map((day) => {
+              const isChecked = checkedDays.has(day);
+              return (
+                <label
+                  key={day}
+                  className={`m-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border text-sm font-semibold transition-colors ${
+                    isChecked
+                      ? "border-navy-900 bg-navy-900 text-cream-50"
+                      : "border-navy-900/10 bg-white text-navy-900/60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="classDays"
+                    value={day}
+                    checked={isChecked}
+                    onChange={() => toggleDay(day)}
+                    className="sr-only"
+                  />
+                  {DAY_LABELS[day]}
+                </label>
+              );
+            })}
           </div>
 
           {checkedDays.size > 0 && (

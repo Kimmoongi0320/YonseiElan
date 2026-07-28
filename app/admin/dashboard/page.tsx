@@ -16,7 +16,7 @@ export default async function AdminDashboardPage() {
   const students = await listStudentsForAdmin();
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
+    <div className="flex min-h-dvh-safe flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
       <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-3 sm:space-y-0">
         <h1 className="text-lg font-bold text-navy-900 sm:text-xl">관리자 대시보드</h1>
         <div className="flex items-center space-x-2">

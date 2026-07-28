@@ -20,7 +20,7 @@ export default async function StudentAttendancePage({
   if (!student) notFound();
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
+    <div className="flex min-h-dvh-safe flex-1 flex-col bg-cream-50 px-4 pb-12 pt-6 sm:px-10 sm:py-10">
       <div className="mx-auto flex w-full max-w-4xl flex-col space-y-6">
         <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:justify-between sm:space-x-3 sm:space-y-0">
           <div className="flex items-center space-x-2">

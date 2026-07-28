@@ -653,8 +653,8 @@ export function AttendanceCalendar({ student }: Props) {
               const isResolvedDay = visibleSelectedDate === resolved;
 
               return (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-rose-50/60 px-3 py-2">
-                  <span className="text-xs font-medium text-rose-600">
+                <div className="flex flex-wrap items-center justify-between rounded-xl bg-rose-50/60 px-3 py-2">
+                  <span className="mb-2 text-xs font-medium text-rose-600">
                     {isResolvedDay
                       ? `이 달 결제일${override ? " (지정됨)" : ""}`
                       : `이 달 결제일: ${formatShortMonthDay(resolved ?? "")}`}
@@ -664,7 +664,7 @@ export function AttendanceCalendar({ student }: Props) {
                       type="button"
                       disabled={paymentOverrideSaving}
                       onClick={() => clearPaymentOverride(override.id)}
-                      className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       기본값으로 되돌리기
                     </button>
@@ -673,7 +673,7 @@ export function AttendanceCalendar({ student }: Props) {
                       type="button"
                       disabled={paymentOverrideSaving}
                       onClick={() => submitPaymentOverride(visibleSelectedDate)}
-                      className="rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       이 날을 결제일로 지정
                     </button>

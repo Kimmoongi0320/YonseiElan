@@ -23,6 +23,27 @@
 
   --color-cream-100: #f5efe2;
   --color-cream-50: #faf7f1;
+
+  /* RGB triplets so Tailwind's `/opacity` modifiers (e.g. text-navy-900/50) can
+     apply alpha via rgb(var(...) / <alpha-value>) — plain hex vars above can't
+     accept an alpha channel, so those utilities silently produced no CSS. */
+  --color-navy-950-rgb: 10 23 48;
+  --color-navy-900-rgb: 15 36 71;
+  --color-navy-800-rgb: 22 53 97;
+  --color-navy-700-rgb: 31 68 121;
+  --color-navy-600-rgb: 44 86 151;
+  --color-navy-500-rgb: 61 107 176;
+  --color-navy-100-rgb: 228 234 243;
+  --color-navy-50-rgb: 241 244 250;
+
+  --color-gold-600-rgb: 169 122 44;
+  --color-gold-500-rgb: 201 151 63;
+  --color-gold-400-rgb: 218 178 100;
+  --color-gold-100-rgb: 243 230 204;
+  --color-gold-50-rgb: 249 241 226;
+
+  --color-cream-100-rgb: 245 239 226;
+  --color-cream-50-rgb: 250 247 241;
 }
 
 body {
@@ -64,4 +85,17 @@ body {
 
 .animate-shake {
   animation: shake 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* `dvh` is an unrecognized unit on iOS Safari < 15.4, which makes the whole
+   min-height declaration invalid there — falls back to 100vh, then upgrades
+   to 100dvh where supported. */
+.min-h-dvh-safe {
+  min-height: 100vh;
+}
+
+@supports (min-height: 100dvh) {
+  .min-h-dvh-safe {
+    min-height: 100dvh;
+  }
 }

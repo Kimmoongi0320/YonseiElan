@@ -6,7 +6,7 @@ import { MusicNotesBackground } from "@/components/music-notes-background";
 
 export default function Home() {
   return (
-    <div className="relative flex min-h-[100dvh] flex-1 flex-col overflow-hidden bg-cream-50">
+    <div className="relative flex min-h-dvh-safe flex-1 flex-col overflow-hidden bg-cream-50">
       <MusicNotesBackground className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.06]" />
 
       <header className="relative z-10 flex items-center space-x-3 px-6 pt-6 sm:px-10 sm:pt-8">

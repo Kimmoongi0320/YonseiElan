@@ -54,7 +54,7 @@ export default function AdminAuthPage() {
   };
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 flex-col items-center justify-center space-y-8 bg-cream-50 px-6">
+    <div className="flex min-h-dvh-safe flex-1 flex-col items-center justify-center space-y-8 bg-cream-50 px-6">
       <div className="flex flex-col items-center space-y-3 text-center">
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-navy-900/5 text-navy-900">
           {pending ? (
