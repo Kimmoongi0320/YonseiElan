@@ -133,20 +133,6 @@ export async function adminCheckOutAction(studentId: string): Promise<{ ok: bool
   return { ok: result.ok };
 }
 
-export async function getStudentAttendanceMonthAction(
-  studentId: string,
-  year: number,
-  month: number
-): Promise<Record<string, DayAttendanceInfo>> {
-  await requireAdminSession();
-
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
-    throw new Error("Invalid year/month");
-  }
-
-  return getStudentMonthAttendance(studentId, year, month);
-}
-
 export async function setAttendanceStatusAction(
   studentId: string,
   date: string,
@@ -209,23 +195,31 @@ export async function setAttendanceMakeupDateAction(
   return result;
 }
 
-export async function getStudentPausesAction(studentId: string): Promise<StudentPause[]> {
-  await requireAdminSession();
-  return listStudentPauses(studentId);
-}
-
-export async function getStudentPausesForMonthAction(
+// The attendance calendar always needs all three of these together (initial
+// load, month navigation, and after any pause mutation) — bundling them into
+// one round trip instead of three separate server actions.
+export async function getAttendanceCalendarDataAction(
   studentId: string,
   year: number,
   month: number
-): Promise<StudentPause[]> {
+): Promise<{
+  attendance: Record<string, DayAttendanceInfo>;
+  pauses: StudentPause[];
+  monthPauses: StudentPause[];
+}> {
   await requireAdminSession();
 
   if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
     throw new Error("Invalid year/month");
   }
 
-  return listStudentPausesForMonth(studentId, year, month);
+  const [attendance, pauses, monthPauses] = await Promise.all([
+    getStudentMonthAttendance(studentId, year, month),
+    listStudentPauses(studentId),
+    listStudentPausesForMonth(studentId, year, month),
+  ]);
+
+  return { attendance, pauses, monthPauses };
 }
 
 export async function createStudentPauseAction(

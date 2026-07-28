@@ -8,9 +8,7 @@ import {
   clearAttendanceDayAction,
   createStudentPauseAction,
   deleteStudentPauseAction,
-  getStudentAttendanceMonthAction,
-  getStudentPausesAction,
-  getStudentPausesForMonthAction,
+  getAttendanceCalendarDataAction,
   setAttendanceMakeupDateAction,
   setAttendanceStatusAction,
   updateStudentPauseEndAction,
@@ -117,28 +115,27 @@ export function AttendanceCalendar({ student }: Props) {
   const [pauseError, setPauseError] = useState<string | null>(null);
   const [pauseSaving, setPauseSaving] = useState(false);
 
-  const fetchPauses = (studentId: string) => {
-    getStudentPausesAction(studentId)
-      .then(setPauses)
-      .catch((error) => console.error("Failed to load student pauses", error));
+  // Bundles the calendar grid's attendance data with both pause views
+  // (all-time, for the management panel; month-scoped, for calendar-cell
+  // tagging) into one request — they're always needed together on mount,
+  // month navigation, and after any pause mutation.
+  const fetchAll = (studentId: string, y: number, m: number) => {
+    startLoadingTransition(async () => {
+      try {
+        const result = await getAttendanceCalendarDataAction(studentId, y, m);
+        setData(result.attendance);
+        setPauses(result.pauses);
+        setMonthPauses(result.monthPauses);
+        setLoadError(false);
+      } catch (error) {
+        console.error("Failed to load attendance calendar", error);
+        setLoadError(true);
+      }
+    });
   };
 
   useEffect(() => {
-    fetchPauses(student.id);
-  }, [student.id]);
-
-  // Scoped to the currently displayed month — this is the only range the
-  // calendar grid ever needs pauses for, unlike `pauses` above (used by the
-  // management panel, which cares about "current/upcoming" and "past"
-  // regardless of which month happens to be on screen).
-  const fetchMonthPauses = (studentId: string, y: number, m: number) => {
-    getStudentPausesForMonthAction(studentId, y, m)
-      .then(setMonthPauses)
-      .catch((error) => console.error("Failed to load month pauses", error));
-  };
-
-  useEffect(() => {
-    fetchMonthPauses(student.id, year, month);
+    fetchAll(student.id, year, month);
   }, [student.id, year, month]);
 
   // Pauses whose resume date hasn't passed yet — these are what the top
@@ -174,9 +171,7 @@ export function AttendanceCalendar({ student }: Props) {
       }
       setPauseFormOpen(false);
       setPauseUntil("");
-      fetchPauses(student.id);
-      fetchMonthPauses(student.id, year, month);
-      fetchMonth(student.id, year, month);
+      fetchAll(student.id, year, month);
     } catch (error) {
       console.error("Failed to create student pause", error);
       setPauseError(PAUSE_FALLBACK_ERROR);
@@ -195,9 +190,7 @@ export function AttendanceCalendar({ student }: Props) {
         return;
       }
       setEditingResumeDate(null);
-      fetchPauses(student.id);
-      fetchMonthPauses(student.id, year, month);
-      fetchMonth(student.id, year, month);
+      fetchAll(student.id, year, month);
     } catch (error) {
       console.error("Failed to update student pause", error);
       setPauseError(PAUSE_FALLBACK_ERROR);
@@ -211,9 +204,7 @@ export function AttendanceCalendar({ student }: Props) {
     setPauseError(null);
     try {
       await deleteStudentPauseAction(student.id, pauseId);
-      fetchPauses(student.id);
-      fetchMonthPauses(student.id, year, month);
-      fetchMonth(student.id, year, month);
+      fetchAll(student.id, year, month);
     } catch (error) {
       console.error("Failed to delete student pause", error);
       setPauseError(PAUSE_FALLBACK_ERROR);
@@ -221,23 +212,6 @@ export function AttendanceCalendar({ student }: Props) {
       setPauseSaving(false);
     }
   };
-
-  const fetchMonth = (studentId: string, y: number, m: number) => {
-    startLoadingTransition(async () => {
-      try {
-        const result = await getStudentAttendanceMonthAction(studentId, y, m);
-        setData(result);
-        setLoadError(false);
-      } catch (error) {
-        console.error("Failed to load attendance calendar", error);
-        setLoadError(true);
-      }
-    });
-  };
-
-  useEffect(() => {
-    fetchMonth(student.id, year, month);
-  }, [student.id, year, month]);
 
   const changeMonth = (delta: number) => {
     let nextMonth = month + delta;
@@ -273,7 +247,7 @@ export function AttendanceCalendar({ student }: Props) {
       console.error("Failed to save attendance override", error);
       // Unknown whether the write landed, so fall back to a full refetch to
       // recover a consistent view. The happy path above skips this refetch.
-      fetchMonth(student.id, year, month);
+      fetchAll(student.id, year, month);
     } finally {
       setSavingDates((prev) => {
         const next = new Set(prev);
