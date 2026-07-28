@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --background: #faf7f1;
@@ -21,27 +23,6 @@
 
   --color-cream-100: #f5efe2;
   --color-cream-50: #faf7f1;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-navy-950: var(--color-navy-950);
-  --color-navy-900: var(--color-navy-900);
-  --color-navy-800: var(--color-navy-800);
-  --color-navy-700: var(--color-navy-700);
-  --color-navy-600: var(--color-navy-600);
-  --color-navy-500: var(--color-navy-500);
-  --color-navy-100: var(--color-navy-100);
-  --color-navy-50: var(--color-navy-50);
-  --color-gold-600: var(--color-gold-600);
-  --color-gold-500: var(--color-gold-500);
-  --color-gold-400: var(--color-gold-400);
-  --color-gold-100: var(--color-gold-100);
-  --color-gold-50: var(--color-gold-50);
-  --color-cream-100: var(--color-cream-100);
-  --color-cream-50: var(--color-cream-50);
-  --font-sans: var(--font-pretendard);
 }
 
 body {

@@ -118,7 +118,7 @@ export function StudentFormModal({ open, onClose, student }: Props) {
             {DAY_KEYS.map((day) => (
               <label
                 key={day}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-navy-900/10 bg-white text-sm font-semibold text-navy-900/60 transition-colors has-checked:border-navy-900 has-checked:bg-navy-900 has-checked:text-cream-50"
+                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-navy-900/10 bg-white text-sm font-semibold text-navy-900/60 transition-colors has-[:checked]:border-navy-900 has-[:checked]:bg-navy-900 has-[:checked]:text-cream-50"
               >
                 <input
                   type="checkbox"
