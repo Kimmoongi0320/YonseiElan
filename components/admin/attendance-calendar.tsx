@@ -6,12 +6,18 @@ import { TimeSelect } from "@/components/admin/time-select";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
 import {
   clearAttendanceDayAction,
+  createStudentPauseAction,
+  deleteStudentPauseAction,
   getStudentAttendanceMonthAction,
+  getStudentPausesAction,
+  getStudentPausesForMonthAction,
   setAttendanceMakeupDateAction,
   setAttendanceStatusAction,
+  updateStudentPauseEndAction,
 } from "@/app/admin/actions";
 import type { AdminStudentSummary } from "@/lib/students";
 import type { DayAttendanceInfo, DayAttendanceStatus } from "@/lib/attendance-calendar";
+import type { StudentPause } from "@/lib/student-pauses";
 import { dayKeyForDateStr, TIME_RE, type DayKey } from "@/lib/schedule";
 import { formatTime } from "@/lib/format";
 
@@ -101,6 +107,120 @@ export function AttendanceCalendar({ student }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [clearWarningDate, setClearWarningDate] = useState<string | null>(null);
   const [clearWarningPending, setClearWarningPending] = useState(false);
+
+  const [pauses, setPauses] = useState<StudentPause[]>([]);
+  const [monthPauses, setMonthPauses] = useState<StudentPause[]>([]);
+  const [pauseFormOpen, setPauseFormOpen] = useState(false);
+  const [pauseFrom, setPauseFrom] = useState(todayStr);
+  const [pauseUntil, setPauseUntil] = useState("");
+  const [editingResumeDate, setEditingResumeDate] = useState<string | null>(null);
+  const [pauseError, setPauseError] = useState<string | null>(null);
+  const [pauseSaving, setPauseSaving] = useState(false);
+
+  const fetchPauses = (studentId: string) => {
+    getStudentPausesAction(studentId)
+      .then(setPauses)
+      .catch((error) => console.error("Failed to load student pauses", error));
+  };
+
+  useEffect(() => {
+    fetchPauses(student.id);
+  }, [student.id]);
+
+  // Scoped to the currently displayed month — this is the only range the
+  // calendar grid ever needs pauses for, unlike `pauses` above (used by the
+  // management panel, which cares about "current/upcoming" and "past"
+  // regardless of which month happens to be on screen).
+  const fetchMonthPauses = (studentId: string, y: number, m: number) => {
+    getStudentPausesForMonthAction(studentId, y, m)
+      .then(setMonthPauses)
+      .catch((error) => console.error("Failed to load month pauses", error));
+  };
+
+  useEffect(() => {
+    fetchMonthPauses(student.id, year, month);
+  }, [student.id, year, month]);
+
+  // Pauses whose resume date hasn't passed yet — these are what the top
+  // panel below manages (edit resume date / cancel) for quick access without
+  // digging into the calendar. Already-ended pauses are deliberately left
+  // out of this list, but they stay in `pauses` itself so pauseForDate still
+  // tags their calendar days "정지" — a pause dropping out of this list
+  // doesn't erase its history, and clicking its day in the grid still opens
+  // the same edit/cancel controls (see the detail panel below the grid).
+  // Sorted soonest-first (the raw `pauses` list is sorted newest paused_from
+  // first, which would otherwise surface the latest-starting pause ahead of
+  // a nearer or already-ongoing one when several are registered).
+  const upcomingPauses = pauses
+    .filter((p) => p.pausedUntil >= todayStr)
+    .sort((a, b) => a.pausedFrom.localeCompare(b.pausedFrom));
+  const pauseForDate = (dateStr: string) =>
+    monthPauses.find((p) => dateStr >= p.pausedFrom && dateStr <= p.pausedUntil);
+
+  const PAUSE_FALLBACK_ERROR = "정지 처리 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.";
+
+  const submitNewPause = async () => {
+    if (!pauseUntil) {
+      setPauseError("재개일을 입력해주세요.");
+      return;
+    }
+    setPauseSaving(true);
+    setPauseError(null);
+    try {
+      const result = await createStudentPauseAction(student.id, pauseFrom, pauseUntil);
+      if ("error" in result) {
+        setPauseError(result.error);
+        return;
+      }
+      setPauseFormOpen(false);
+      setPauseUntil("");
+      fetchPauses(student.id);
+      fetchMonthPauses(student.id, year, month);
+      fetchMonth(student.id, year, month);
+    } catch (error) {
+      console.error("Failed to create student pause", error);
+      setPauseError(PAUSE_FALLBACK_ERROR);
+    } finally {
+      setPauseSaving(false);
+    }
+  };
+
+  const submitResumeDateEdit = async (pauseId: string, newPausedUntil: string) => {
+    setPauseSaving(true);
+    setPauseError(null);
+    try {
+      const result = await updateStudentPauseEndAction(student.id, pauseId, newPausedUntil);
+      if ("error" in result) {
+        setPauseError(result.error);
+        return;
+      }
+      setEditingResumeDate(null);
+      fetchPauses(student.id);
+      fetchMonthPauses(student.id, year, month);
+      fetchMonth(student.id, year, month);
+    } catch (error) {
+      console.error("Failed to update student pause", error);
+      setPauseError(PAUSE_FALLBACK_ERROR);
+    } finally {
+      setPauseSaving(false);
+    }
+  };
+
+  const cancelPause = async (pauseId: string) => {
+    setPauseSaving(true);
+    setPauseError(null);
+    try {
+      await deleteStudentPauseAction(student.id, pauseId);
+      fetchPauses(student.id);
+      fetchMonthPauses(student.id, year, month);
+      fetchMonth(student.id, year, month);
+    } catch (error) {
+      console.error("Failed to delete student pause", error);
+      setPauseError(PAUSE_FALLBACK_ERROR);
+    } finally {
+      setPauseSaving(false);
+    }
+  };
 
   const fetchMonth = (studentId: string, y: number, m: number) => {
     startLoadingTransition(async () => {
@@ -213,6 +333,72 @@ export function AttendanceCalendar({ student }: Props) {
     void withSaving(dateStr, () => setAttendanceMakeupDateAction(student.id, dateStr, makeupDate, resolvedTime));
   };
 
+  const renderPauseRow = (pause: StudentPause, muted: boolean) => (
+    <div key={pause.id} className="flex flex-wrap items-center justify-between gap-2">
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+          muted ? "bg-navy-900/5 text-navy-900/40" : "bg-slate-100 text-slate-600"
+        }`}
+      >
+        정지 {formatShortMonthDay(pause.pausedFrom)} ~ {formatShortMonthDay(pause.pausedUntil)}
+      </span>
+      {editingResumeDate === pause.id ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            defaultValue={pause.pausedUntil}
+            min={pause.pausedFrom}
+            disabled={pauseSaving}
+            onChange={(e) => setPauseUntil(e.target.value)}
+            className="rounded-xl border border-navy-900/10 bg-white px-3 py-1.5 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          <button
+            type="button"
+            disabled={pauseSaving}
+            onClick={() => submitResumeDateEdit(pause.id, pauseUntil || pause.pausedUntil)}
+            className="rounded-xl bg-navy-900 px-3 py-1.5 text-xs font-semibold text-cream-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            저장
+          </button>
+          <button
+            type="button"
+            disabled={pauseSaving}
+            onClick={() => {
+              setEditingResumeDate(null);
+              setPauseError(null);
+            }}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/50 hover:bg-navy-900/5"
+          >
+            취소
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pauseSaving}
+            onClick={() => {
+              setPauseUntil(pause.pausedUntil);
+              setEditingResumeDate(pause.id);
+              setPauseError(null);
+            }}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5"
+          >
+            재개일 수정
+          </button>
+          <button
+            type="button"
+            disabled={pauseSaving}
+            onClick={() => cancelPause(pause.id)}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+          >
+            정지 취소
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   const totalDays = daysInMonth(year, month);
   const leadingBlanks = firstWeekday(year, month);
   const cells: (number | null)[] = [
@@ -226,6 +412,7 @@ export function AttendanceCalendar({ student }: Props) {
     selectedDate && selectedDate.startsWith(`${year}-${pad2(month)}-`) ? selectedDate : null;
   const selectedInfo = visibleSelectedDate ? (data[visibleSelectedDate] ?? emptyDayInfo()) : null;
   const selectedSaving = visibleSelectedDate != null && savingDates.has(visibleSelectedDate);
+  const selectedPause = visibleSelectedDate ? pauseForDate(visibleSelectedDate) : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -257,6 +444,68 @@ export function AttendanceCalendar({ student }: Props) {
         </p>
       )}
 
+      <div className="flex flex-col gap-2 rounded-2xl bg-white p-4 shadow-[0_15px_40px_-30px_rgba(10,23,48,0.3)]">
+        {upcomingPauses.map((pause) => renderPauseRow(pause, false))}
+
+        {pauseFormOpen ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-navy-900/50">
+              시작일
+              <input
+                type="date"
+                value={pauseFrom}
+                disabled={pauseSaving}
+                onChange={(e) => setPauseFrom(e.target.value)}
+                className="rounded-xl border border-navy-900/10 bg-white px-3 py-1.5 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs font-medium text-navy-900/50">
+              재개일
+              <input
+                type="date"
+                value={pauseUntil}
+                min={pauseFrom}
+                disabled={pauseSaving}
+                onChange={(e) => setPauseUntil(e.target.value)}
+                className="rounded-xl border border-navy-900/10 bg-white px-3 py-1.5 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={pauseSaving}
+              onClick={submitNewPause}
+              className="rounded-xl bg-navy-900 px-3 py-1.5 text-xs font-semibold text-cream-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              등록
+            </button>
+            <button
+              type="button"
+              disabled={pauseSaving}
+              onClick={() => {
+                setPauseFormOpen(false);
+                setPauseError(null);
+              }}
+              className="rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/50 hover:bg-navy-900/5"
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setPauseFrom(todayStr);
+              setPauseUntil("");
+              setPauseFormOpen(true);
+            }}
+            className="w-fit rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5"
+          >
+            + 정지 등록
+          </button>
+        )}
+        {pauseError && <p className="text-xs text-rose-600">{pauseError}</p>}
+      </div>
+
       <div>
         <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-navy-900/35 sm:gap-2 sm:text-xs">
           {WEEKDAY_LABELS.map((w) => (
@@ -274,6 +523,7 @@ export function AttendanceCalendar({ student }: Props) {
               const saving = savingDates.has(dateStr);
               const isClassDay = isRegularClassDay(dateStr, student.classDays);
               const isPaymentDay = student.paymentDay === day;
+              const paused = pauseForDate(dateStr) != null;
 
               const makeupLine =
                 info.status === "absent" && info.makeupDate
@@ -287,8 +537,9 @@ export function AttendanceCalendar({ student }: Props) {
                       }
                     : null;
 
-              const statusClassName =
-                info.status === "present"
+              const statusClassName = paused
+                ? "border-slate-200 bg-slate-100"
+                : info.status === "present"
                   ? "border-emerald-200 bg-emerald-50"
                   : info.status === "absent"
                     ? "border-rose-200 bg-rose-50"
@@ -321,17 +572,23 @@ export function AttendanceCalendar({ student }: Props) {
                     {day}
                   </span>
 
-                  {info.checkInAt != null && (
-                    <span className="w-full text-navy-900/50">등 {formatShortTime(info.checkInAt)}</span>
-                  )}
-                  {info.checkOutAt != null && (
-                    <span className="w-full text-navy-900/50">하 {formatShortTime(info.checkOutAt)}</span>
-                  )}
+                  {paused ? (
+                    <span className="w-full font-medium text-slate-500">정지</span>
+                  ) : (
+                    <>
+                      {info.checkInAt != null && (
+                        <span className="w-full text-navy-900/50">등 {formatShortTime(info.checkInAt)}</span>
+                      )}
+                      {info.checkOutAt != null && (
+                        <span className="w-full text-navy-900/50">하 {formatShortTime(info.checkOutAt)}</span>
+                      )}
 
-                  {makeupLine && (
-                    <span className={`w-full font-medium ${makeupLine.done ? "text-emerald-600" : "text-amber-600"}`}>
-                      {makeupLine.text}
-                    </span>
+                      {makeupLine && (
+                        <span className={`w-full font-medium ${makeupLine.done ? "text-emerald-600" : "text-amber-600"}`}>
+                          {makeupLine.text}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
               );
@@ -360,6 +617,13 @@ export function AttendanceCalendar({ student }: Props) {
             )}
           </div>
 
+          {selectedPause ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-navy-900/50">이 기간은 출석/결석 관리 대상이 아니에요.</p>
+              {renderPauseRow(selectedPause, false)}
+            </div>
+          ) : (
+            <>
           <div className="flex gap-2">
             {STATUS_OPTIONS.map((opt) => (
               <button
@@ -440,6 +704,8 @@ export function AttendanceCalendar({ student }: Props) {
                 </p>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

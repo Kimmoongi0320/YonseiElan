@@ -115,6 +115,27 @@ create index if not exists attendance_overrides_date_idx
   on attendance_overrides (date);
 
 -- ---------------------------------------------------------------------------
+-- student_pauses — admin-registered "정지" (leave of absence) periods, always
+-- entered with both boundary dates up front. Nothing is managed for a
+-- student during a pause: no session counting, no auto-absence, no makeup
+-- scheduling. paused_until can be edited later (extended or shortened) if
+-- the student's actual return date differs from what was planned.
+-- ---------------------------------------------------------------------------
+create table if not exists student_pauses (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references students (id) on delete cascade,
+  paused_from date not null,
+  paused_until date not null,
+  created_at timestamptz not null default now(),
+  check (paused_until >= paused_from)
+);
+
+create index if not exists student_pauses_student_id_idx on student_pauses (student_id);
+
+comment on table student_pauses is
+  '학생별 정지(휴원) 기간. 이 기간의 날짜는 결제 주기 계산, 회차 카운팅, 자동 결석 처리에서 완전히 제외된다.';
+
+-- ---------------------------------------------------------------------------
 -- payment_cycle_start_date / get_student_session_counts — backs the "n회차"
 -- badge on the admin dashboard's student list. Computed in SQL (one row per
 -- student out) rather than pulling raw attendance rows into the app and
@@ -144,6 +165,80 @@ $$;
 comment on function payment_cycle_start_date(integer, date) is
   '결제일(payment_day, 1~31)을 기준으로 ref_date가 속한 결제 주기의 시작일을 구한다. 그 달에 해당 일자가 없으면(예: 31일인데 2월) 그 달 마지막 날로 clamp.';
 
+-- Walks the student's cycle boundaries forward, month by month from a seed
+-- date safely before any of their pauses, delaying each naive monthly
+-- boundary by however many paused days fall inside that cycle — so a pause
+-- doesn't just get excluded from the count, it also pushes back the point
+-- where the NEXT cycle (and the "n회차" reset that comes with it) begins.
+-- Stops as soon as a boundary lands after ref_date, so cycle_start is always
+-- the start of whichever (possibly delayed) cycle ref_date currently falls
+-- in — critically, this does NOT jump past pre-pause days still inside the
+-- current cycle, unlike a naive "shift start by total pause overlap" would;
+-- shifting the start itself would silently drop pre-pause attendance from
+-- the count instead of just skipping the paused days (already handled by
+-- the not-exists pause checks in get_student_session_counts below).
+drop function if exists payment_cycle_start_date_for_student(uuid, date);
+
+create or replace function student_cycle_boundaries(p_student_id uuid, ref_date date)
+returns table (cycle_start date, next_cycle_start date)
+language plpgsql
+stable
+as $$
+declare
+  v_payment_day integer;
+  v_seed date;
+  v_start date;
+  v_naive_next date;
+  v_candidate_next date;
+  v_overlap integer;
+begin
+  select payment_day into v_payment_day from students where id = p_student_id;
+  if v_payment_day is null then
+    return;
+  end if;
+
+  -- Bounded by ref_date as well as the earliest pause: a pause registered
+  -- entirely in the future (the normal case — pauses are always registered
+  -- with both dates up front, often before they start) must not push the
+  -- seed past today, or the walk below starts from a cycle that's already
+  -- ahead of ref_date and never finds today's real cycle_start.
+  select least(ref_date, coalesce(min(sp.paused_from), ref_date)) - 40 into v_seed
+    from student_pauses sp
+    where sp.student_id = p_student_id;
+
+  v_start := payment_cycle_start_date(v_payment_day, v_seed);
+
+  loop
+    v_naive_next := (date_trunc('month', v_start) + interval '1 month')::date
+      + (least(
+          v_payment_day,
+          extract(day from (date_trunc('month', v_start) + interval '2 months - 1 day'))::int
+         ) - 1);
+
+    select coalesce(sum(
+      greatest(0, least(sp.paused_until, v_naive_next - 1) - greatest(sp.paused_from, v_start) + 1)
+    ), 0)
+      into v_overlap
+      from student_pauses sp
+      where sp.student_id = p_student_id
+        and sp.paused_until >= v_start
+        and sp.paused_from < v_naive_next;
+
+    v_candidate_next := v_naive_next + v_overlap;
+
+    exit when v_candidate_next > ref_date;
+    v_start := v_candidate_next;
+  end loop;
+
+  cycle_start := v_start;
+  next_cycle_start := v_candidate_next;
+  return next;
+end;
+$$;
+
+comment on function student_cycle_boundaries(uuid, date) is
+  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 달만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다.';
+
 -- For each active student with a payment_day set: counts distinct dates,
 -- since the most recent payment_day through today (both KST), where the
 -- student is resolved "present" — a real check-in in attendance_records, or
@@ -159,8 +254,9 @@ as $$
     select (now() at time zone 'Asia/Seoul')::date as d
   ),
   cycles as (
-    select s.id as student_id, payment_cycle_start_date(s.payment_day, (select d from today)) as cycle_start
+    select s.id as student_id, b.cycle_start
     from students s
+    cross join lateral student_cycle_boundaries(s.id, (select d from today)) b
     where s.is_active and s.payment_day is not null
   ),
   checkins as (
@@ -168,12 +264,21 @@ as $$
     from attendance_records ar
     join cycles c on c.student_id = ar.student_id
     where (ar.check_in_at at time zone 'Asia/Seoul')::date >= c.cycle_start
+      and not exists (
+        select 1 from student_pauses sp
+        where sp.student_id = ar.student_id
+          and (ar.check_in_at at time zone 'Asia/Seoul')::date between sp.paused_from and sp.paused_until
+      )
   ),
   present_overrides as (
     select ao.student_id, ao.date as d
     from attendance_overrides ao
     join cycles c on c.student_id = ao.student_id
     where ao.status = 'present' and ao.date >= c.cycle_start and ao.date <= (select d from today)
+      and not exists (
+        select 1 from student_pauses sp
+        where sp.student_id = ao.student_id and ao.date between sp.paused_from and sp.paused_until
+      )
   ),
   absent_overrides as (
     select ao.student_id, ao.date as d
@@ -193,7 +298,7 @@ as $$
 $$;
 
 comment on function get_student_session_counts() is
-  '학생별 이번 결제 주기(가장 최근 결제일~오늘, KST) 출석일 수. 관리자 대시보드 "n회차" 배지용.';
+  '학생별 이번 결제 주기(정지 기간의 지연이 반영된 시작일~오늘, KST) 출석일 수. 관리자 대시보드 "n회차" 배지용.';
 
 -- ---------------------------------------------------------------------------
 -- Auto check-out at 22:00 KST — students who checked in but were never
@@ -226,7 +331,9 @@ select cron.schedule(
 -- Runs a few minutes after the checkout job above so it never races it.
 -- An existing override for today (whether admin-set present/absent, or one
 -- this job already inserted) is left alone via on conflict do nothing, so an
--- admin's manual call always wins over the automatic one.
+-- admin's manual call always wins over the automatic one. Students currently
+-- inside a student_pauses range are skipped entirely — a pause means nothing
+-- is managed for that student, including auto-absence.
 -- ---------------------------------------------------------------------------
 do $$
 begin
@@ -267,6 +374,11 @@ select cron.schedule(
       where ao.student_id = s.id
         and ao.date = (now() + interval '9 hours')::date
     )
+    and not exists (
+      select 1 from student_pauses sp
+      where sp.student_id = s.id
+        and (now() + interval '9 hours')::date between sp.paused_from and sp.paused_until
+    )
   on conflict (student_id, date) do nothing;
   $$
 );
@@ -292,6 +404,7 @@ create table if not exists app_settings (
 alter table students enable row level security;
 alter table attendance_records enable row level security;
 alter table attendance_overrides enable row level security;
+alter table student_pauses enable row level security;
 alter table app_settings enable row level security;
 
 

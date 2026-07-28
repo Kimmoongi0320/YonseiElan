@@ -17,6 +17,15 @@ import { NOTIFICATION_TEMPLATES } from "@/lib/notifications";
 import { DAY_LABELS, isDayKey, TIME_RE, type ClassTimes, type DayKey } from "@/lib/schedule";
 import { updateAdminPin, verifyAdminPin } from "@/lib/admin-settings";
 import { getMonthScheduleOverrides, type MonthOverrideRow } from "@/lib/schedule-calendar";
+import {
+  createStudentPause,
+  deleteStudentPause,
+  listStudentPauses,
+  listStudentPausesForMonth,
+  updateStudentPauseEnd,
+  type StudentPause,
+  type StudentPauseResult,
+} from "@/lib/student-pauses";
 
 const SESSION_COOKIE = "elan_admin_session";
 const PHONE_RE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
@@ -198,6 +207,56 @@ export async function setAttendanceMakeupDateAction(
   const result = await setAttendanceMakeupDate(studentId, date, makeupDate, makeupDate === null ? null : makeupTime);
   revalidatePath("/admin/dashboard");
   return result;
+}
+
+export async function getStudentPausesAction(studentId: string): Promise<StudentPause[]> {
+  await requireAdminSession();
+  return listStudentPauses(studentId);
+}
+
+export async function getStudentPausesForMonthAction(
+  studentId: string,
+  year: number,
+  month: number
+): Promise<StudentPause[]> {
+  await requireAdminSession();
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Invalid year/month");
+  }
+
+  return listStudentPausesForMonth(studentId, year, month);
+}
+
+export async function createStudentPauseAction(
+  studentId: string,
+  pausedFrom: string,
+  pausedUntil: string
+): Promise<StudentPauseResult> {
+  await requireAdminSession();
+  const result = await createStudentPause(studentId, pausedFrom, pausedUntil);
+  revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
+  revalidatePath("/admin/dashboard");
+  return result;
+}
+
+export async function updateStudentPauseEndAction(
+  studentId: string,
+  pauseId: string,
+  pausedUntil: string
+): Promise<StudentPauseResult> {
+  await requireAdminSession();
+  const result = await updateStudentPauseEnd(studentId, pauseId, pausedUntil);
+  revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
+  revalidatePath("/admin/dashboard");
+  return result;
+}
+
+export async function deleteStudentPauseAction(studentId: string, pauseId: string): Promise<void> {
+  await requireAdminSession();
+  await deleteStudentPause(studentId, pauseId);
+  revalidatePath(`/admin/dashboard/students/${studentId}/attendance`);
+  revalidatePath("/admin/dashboard");
 }
 
 export async function getScheduleMonthOverridesAction(year: number, month: number): Promise<MonthOverrideRow[]> {

@@ -105,6 +105,35 @@ export type Database = {
           },
         ];
       };
+      student_pauses: {
+        Row: {
+          id: string;
+          student_id: string;
+          paused_from: string;
+          paused_until: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          paused_from: string;
+          paused_until: string;
+          created_at?: string;
+        };
+        Update: {
+          paused_from?: string;
+          paused_until?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "student_pauses_student_id_fkey";
+            columns: ["student_id"];
+            isOneToOne: false;
+            referencedRelation: "students";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       app_settings: {
         Row: {
           key: string;
