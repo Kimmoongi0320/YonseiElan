@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findStudentById } from "@/lib/students";
-import { resolveAttendance } from "@/lib/attendance";
+import { getAlreadyCompletedToday, getOpenRecord, resolveAttendance } from "@/lib/attendance";
 
 export async function POST(request: Request) {
   const { studentId } = await request.json();
@@ -9,12 +9,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, reason: "not-found" }, { status: 404 });
   }
 
-  const student = await findStudentById(studentId);
+  const [student, open, alreadyCompletedToday] = await Promise.all([
+    findStudentById(studentId),
+    getOpenRecord(studentId),
+    getAlreadyCompletedToday(studentId),
+  ]);
+
   if (!student) {
     return NextResponse.json({ ok: false, reason: "not-found" }, { status: 404 });
   }
 
-  const result = await resolveAttendance(studentId);
+  const result = await resolveAttendance(studentId, open, alreadyCompletedToday);
   if (!result.ok) {
     return NextResponse.json(result, { status: 409 });
   }

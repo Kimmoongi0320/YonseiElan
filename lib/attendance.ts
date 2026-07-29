@@ -50,6 +50,24 @@ export async function getOpenRecord(studentId: string): Promise<OpenAttendanceRe
   return { id: data.id, checkInAt: new Date(data.check_in_at).getTime() };
 }
 
+// Whether today's check-in/check-out cycle is already closed out. Read
+// alongside getOpenRecord (both independent, studentId-keyed reads) rather
+// than only after finding no open record, so callers can fetch the two in
+// parallel instead of sequentially.
+export async function getAlreadyCompletedToday(studentId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .select("check_in_at")
+    .eq("student_id", studentId)
+    .gte("check_in_at", startOfTodayKstIso(Date.now()))
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data !== null;
+}
+
 // Closes out a stale (pre-today) open record left behind by a failed 22:00
 // auto-checkout cron run, so the student can check in again today. Scoped to
 // the specific record id and still-open state, so it's a no-op if the cron
@@ -219,9 +237,16 @@ export type AttendanceAction = "check-in" | "check-out";
 // mode up front. No record today -> check-in; an open record from today ->
 // check-out; today's cycle already closed -> reported back with no write,
 // so a stray extra tap can't create a second record for the same day.
-export async function resolveAttendance(studentId: string) {
+//
+// `open` and `alreadyCompletedToday` are fetched by the caller (in parallel
+// with the student lookup), rather than here, so the independent reads that
+// precede the actual write don't run one after another.
+export async function resolveAttendance(
+  studentId: string,
+  open: OpenAttendanceRecord | null,
+  alreadyCompletedToday: boolean,
+) {
   const now = Date.now();
-  const open = await getOpenRecord(studentId);
 
   if (open) {
     if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) {
@@ -234,17 +259,7 @@ export async function resolveAttendance(studentId: string) {
     return { ...result, action: "check-in" as const };
   }
 
-  const supabase = getSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("attendance_records")
-    .select("check_in_at")
-    .eq("student_id", studentId)
-    .gte("check_in_at", startOfTodayKstIso(now))
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-
-  if (data) {
+  if (alreadyCompletedToday) {
     return { ok: false as const, action: "already-completed" as const, reason: "already-completed" as const };
   }
 
