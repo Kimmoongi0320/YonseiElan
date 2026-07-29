@@ -189,6 +189,10 @@ export type Database = {
         Args: { p_student_id: string; p_ref_date: string };
         Returns: undefined;
       };
+      projected_payment_date_for_month: {
+        Args: { p_student_id: string; p_year: number; p_month: number };
+        Returns: string | null;
+      };
     };
   };
 };

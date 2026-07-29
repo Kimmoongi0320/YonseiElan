@@ -121,6 +121,15 @@ export function AttendanceCalendar({ student }: Props) {
   const [paymentOverrides, setPaymentOverrides] = useState<StudentPaymentOverride[]>([]);
   const [paymentOverrideSaving, setPaymentOverrideSaving] = useState(false);
   const [paymentOverrideError, setPaymentOverrideError] = useState<string | null>(null);
+  // Pause-adjusted payment date for the currently viewed (year, month), only
+  // — the grid never renders cells outside it, so a single value is enough.
+  // Null unless a pause has actually pushed this month's date off the naive
+  // payment_day clamp (or there's no payment_day at all).
+  const [projectedPaymentDate, setProjectedPaymentDate] = useState<string | null>(null);
+  // Same projection, but for the month one ahead of the one being viewed —
+  // only ever used to fill in the "다음 달 결제일" bubble next to the
+  // forward-nav button below, never by resolvedPaymentDate's general lookup.
+  const [nextMonthProjectedPaymentDate, setNextMonthProjectedPaymentDate] = useState<string | null>(null);
 
   // Bundles the calendar grid's attendance data with both pause views
   // (all-time, for the management panel; month-scoped, for calendar-cell
@@ -134,6 +143,8 @@ export function AttendanceCalendar({ student }: Props) {
         setPauses(result.pauses);
         setMonthPauses(result.monthPauses);
         setPaymentOverrides(result.paymentOverrides);
+        setProjectedPaymentDate(result.projectedPaymentDate);
+        setNextMonthProjectedPaymentDate(result.nextMonthProjectedPaymentDate);
         setLoadError(false);
       } catch (error) {
         console.error("Failed to load attendance calendar", error);
@@ -164,13 +175,25 @@ export function AttendanceCalendar({ student }: Props) {
 
   // The resolved payment date for a given calendar month: a confirmed date
   // if one falls in that month (whether admin-set ahead of time or frozen
-  // in automatically once the month passed), else student.paymentDay
-  // clamped to that month's day count (so e.g. paymentDay=31 correctly
-  // falls back to the 28th/29th in February instead of matching nothing).
+  // in automatically once the month passed); else, for the currently viewed
+  // month or the one right after it, the live pause-adjusted projection
+  // fetched alongside them — trusted as-is, including a null result, since a
+  // pause spanning the entire month legitimately means no cycle boundary
+  // lands in it at all (falling back to the naive clamp below in that case
+  // would show a payment date that's actually inside the pause); else
+  // student.paymentDay clamped to that month's day count (so e.g.
+  // paymentDay=31 correctly falls back to the 28th/29th in February instead
+  // of matching nothing) — only reachable for a month other than those two,
+  // which never got a pause-aware projection fetched for them in the first
+  // place.
   const overrideForMonth = (y: number, m: number) => paymentOverrides.find((o) => o.paymentDate.startsWith(`${y}-${pad2(m)}-`));
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
   const resolvedPaymentDate = (y: number, m: number): string | null => {
     const override = overrideForMonth(y, m);
     if (override) return override.paymentDate;
+    if (y === year && m === month) return projectedPaymentDate;
+    if (y === nextYear && m === nextMonth) return nextMonthProjectedPaymentDate;
     if (student.paymentDay == null) return null;
     return ymd(y, m, Math.min(student.paymentDay, daysInMonth(y, m)));
   };
@@ -457,14 +480,28 @@ export function AttendanceCalendar({ student }: Props) {
         <span className="text-sm font-semibold text-navy-900">
           {year}년 {month}월
         </span>
-        <button
-          type="button"
-          onClick={() => changeMonth(1)}
-          aria-label="다음 달"
-          className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
-        >
-          <ChevronRightIcon className="h-4 w-4" />
-        </button>
+        <div className="relative">
+          {student.paymentDay != null &&
+            (() => {
+              const nextDate = resolvedPaymentDate(nextYear, nextMonth);
+              if (!nextDate) return null;
+              const nextDay = Number(nextDate.slice(-2));
+              return (
+                <div className="pointer-events-none absolute -top-8 right-0 z-10 whitespace-nowrap rounded-full bg-indigo-500 px-2.5 py-1 text-[10px] font-semibold text-white shadow-md">
+                  다음달 결제일은 {nextDay}일이에요
+                  <span className="absolute right-3 top-full h-0 w-0 border-4 border-transparent border-t-indigo-500" />
+                </div>
+              );
+            })()}
+          <button
+            type="button"
+            onClick={() => changeMonth(1)}
+            aria-label="다음 달"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-navy-900/50 transition-colors hover:bg-navy-900/5 hover:text-navy-900"
+          >
+            <ChevronRightIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {loadError && (
@@ -652,41 +689,68 @@ export function AttendanceCalendar({ student }: Props) {
               const resolved = resolvedPaymentDate(selYear, selMonth);
               const override = overrideForMonth(selYear, selMonth);
               const isResolvedDay = visibleSelectedDate === resolved;
+              // A pause covering this day means it isn't a real attendance
+              // cycle boundary, so it can't be designated the payment date
+              // even though resolvedPaymentDate's naive clamp doesn't know
+              // that (only the server-side cycle calc accounts for pauses).
+              const pausedHere = selectedPause != null;
+              // Not yet a confirmed override, but pushed off the naive
+              // payment_day clamp by a pause — a live projection that only
+              // becomes permanent once that cycle is actually over.
+              const naiveDate =
+                student.paymentDay != null ? ymd(selYear, selMonth, Math.min(student.paymentDay, daysInMonth(selYear, selMonth))) : null;
+              const isProjected = !override && resolved != null && resolved !== naiveDate;
+              // An override normally can't be created inside a pause (see
+              // submitPaymentOverride's server-side check), but a pause
+              // registered or extended *after* the override already existed
+              // can still end up covering it — left alone rather than
+              // auto-cleared (an admin might have a reason to keep a
+              // confirmed/frozen date as-is), so just flag it for review.
+              const overrideInPause = override != null && pauseForDate(override.paymentDate) != null;
 
               return (
-                <div className="flex flex-wrap items-center justify-between rounded-xl bg-indigo-50 px-3 py-2">
-                  <span className="mb-2 flex items-center space-x-1.5 text-xs font-medium text-indigo-600">
-                    <span
-                      className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-500 text-[8px] font-bold text-white"
-                      aria-hidden="true"
-                    >
-                      ₩
+                <div className="flex flex-col space-y-2 rounded-xl bg-indigo-50 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between">
+                    <span className="mb-2 flex items-center space-x-1.5 text-xs font-medium text-indigo-600">
+                      <span
+                        className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-indigo-500 text-[8px] font-bold text-white"
+                        aria-hidden="true"
+                      >
+                        ₩
+                      </span>
+                      <span>
+                        {isResolvedDay
+                          ? `이 달 결제일${override ? " (지정됨)" : isProjected ? " (예상, 정지 반영)" : ""}`
+                          : resolved != null
+                            ? `이 달 결제일: ${formatShortMonthDay(resolved)}${isProjected ? " (예상)" : ""}`
+                            : "정지 기간이 이 달 결제 주기를 모두 덮고 있어 아직 결제일이 없어요"}
+                      </span>
                     </span>
-                    <span>
-                      {isResolvedDay
-                        ? `이 달 결제일${override ? " (지정됨)" : ""}`
-                        : `이 달 결제일: ${formatShortMonthDay(resolved ?? "")}`}
-                    </span>
-                  </span>
-                  {isResolvedDay && override ? (
-                    <button
-                      type="button"
-                      disabled={paymentOverrideSaving}
-                      onClick={() => clearPaymentOverride(override.id)}
-                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      기본값으로 되돌리기
-                    </button>
-                  ) : !isResolvedDay ? (
-                    <button
-                      type="button"
-                      disabled={paymentOverrideSaving}
-                      onClick={() => submitPaymentOverride(visibleSelectedDate)}
-                      className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      이 날을 결제일로 지정
-                    </button>
-                  ) : null}
+                    {isResolvedDay && override ? (
+                      <button
+                        type="button"
+                        disabled={paymentOverrideSaving}
+                        onClick={() => clearPaymentOverride(override.id)}
+                        className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-navy-900/60 hover:bg-navy-900/5 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        기본값으로 되돌리기
+                      </button>
+                    ) : !isResolvedDay && !pausedHere ? (
+                      <button
+                        type="button"
+                        disabled={paymentOverrideSaving}
+                        onClick={() => submitPaymentOverride(visibleSelectedDate)}
+                        className="mb-2 rounded-xl px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        이 날을 결제일로 지정
+                      </button>
+                    ) : null}
+                  </div>
+                  {overrideInPause && (
+                    <p className="text-xs text-amber-600">
+                      ⚠ 이 결제일은 정지기간과 겹쳐요. 필요하면 위에서 기본값으로 되돌려주세요.
+                    </p>
+                  )}
                 </div>
               );
             })()}

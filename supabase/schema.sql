@@ -230,6 +230,7 @@ declare
   v_next_month date;
   v_naive_next date;
   v_candidate_next date;
+  v_next_candidate date;
   v_overlap integer;
 begin
   select payment_day into v_payment_day from students where id = p_student_id;
@@ -269,16 +270,28 @@ begin
             extract(day from (v_next_month + interval '1 month - 1 day'))::int
            ) - 1);
 
-      select coalesce(sum(
-        greatest(0, least(sp.paused_until, v_naive_next - 1) - greatest(sp.paused_from, v_start) + 1)
-      ), 0)
-        into v_overlap
-        from student_pauses sp
-        where sp.student_id = p_student_id
-          and sp.paused_until >= v_start
-          and sp.paused_from < v_naive_next;
+      -- A single addition of "paused days inside [v_start, naive_next)" can
+      -- undershoot when a pause is long enough to still cover the pushed-out
+      -- date — the extra days added to escape the pause are themselves inside
+      -- it, or inside a later pause the extension now reaches. Re-derive the
+      -- overlap against the growing candidate and keep pushing until adding
+      -- more paused days no longer moves it, i.e. a fixed point where the
+      -- candidate finally lands clear of every pause it swept over.
+      v_candidate_next := v_naive_next;
+      loop
+        select coalesce(sum(
+          greatest(0, least(sp.paused_until, v_candidate_next - 1) - greatest(sp.paused_from, v_start) + 1)
+        ), 0)
+          into v_overlap
+          from student_pauses sp
+          where sp.student_id = p_student_id
+            and sp.paused_until >= v_start
+            and sp.paused_from < v_candidate_next;
 
-      v_candidate_next := v_naive_next + v_overlap;
+        v_next_candidate := v_naive_next + v_overlap;
+        exit when v_next_candidate = v_candidate_next;
+        v_candidate_next := v_next_candidate;
+      end loop;
     end if;
 
     exit when v_candidate_next > ref_date;
@@ -292,7 +305,30 @@ end;
 $$;
 
 comment on function student_cycle_boundaries(uuid, date) is
-  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 기간만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다. 매 단계마다 직전 시작일 이후 가장 가까운 student_payment_overrides 행이 있으면 그 날짜를 그대로 다음 결제일로 쓰고, 없으면 payment_day/정지 지연 계산을 쓴다. 읽기 전용이며, payment_day 갱신과 과거 회차 고정은 freeze_student_payment_history()가 담당한다.';
+  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 기간만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다. 밀린 날짜가 다시 (같거나 다른) 정지 기간과 겹치면 겹치지 않을 때까지 반복해서 더 밀어낸다. 매 단계마다 직전 시작일 이후 가장 가까운 student_payment_overrides 행이 있으면 그 날짜를 그대로 다음 결제일로 쓰고, 없으면 payment_day/정지 지연 계산을 쓴다. 읽기 전용이며, payment_day 갱신과 과거 회차 고정은 freeze_student_payment_history()가 담당한다.';
+
+-- Read-only projection of the payment date for a given calendar month,
+-- backing the attendance calendar's "이 달 결제일" display. Reuses
+-- student_cycle_boundaries with ref_date pinned to the target month's last
+-- day, so a pause's delay shows up on screen the moment it's registered —
+-- not just after freeze_student_payment_history has a chance to commit it
+-- in hindsight once the cycle is actually over. Returns null when the
+-- resulting cycle_start doesn't land inside the requested month at all
+-- (an edge case only reachable with pauses long enough to skip a month
+-- entirely), leaving the caller to fall back to the naive payment_day clamp.
+create or replace function projected_payment_date_for_month(p_student_id uuid, p_year int, p_month int)
+returns date
+language sql
+stable
+as $$
+  select cycle_start
+  from student_cycle_boundaries(p_student_id, (make_date(p_year, p_month, 1) + interval '1 month - 1 day')::date)
+  where cycle_start >= make_date(p_year, p_month, 1)
+    and cycle_start < (make_date(p_year, p_month, 1) + interval '1 month')::date
+$$;
+
+comment on function projected_payment_date_for_month(uuid, int, int) is
+  '주어진 연/월에 대한 결제일을 정지 지연까지 반영해서 미리 계산한다(확정 여부와 무관). student_cycle_boundaries를 그대로 재사용하므로 이미 확정된 override가 있으면 그 값을, 없으면 payment_day + 정지 지연 계산 값을 돌려준다.';
 
 -- Write-through counterpart to student_cycle_boundaries above: walks the
 -- exact same sequence of boundaries, but for every step definitively in the
@@ -318,6 +354,7 @@ declare
   v_next_month date;
   v_naive_next date;
   v_candidate_next date;
+  v_next_candidate date;
   v_overlap integer;
   v_disturbed boolean;
   v_ref date;
@@ -351,16 +388,26 @@ begin
             extract(day from (v_next_month + interval '1 month - 1 day'))::int
            ) - 1);
 
-      select coalesce(sum(
-        greatest(0, least(sp.paused_until, v_naive_next - 1) - greatest(sp.paused_from, v_start) + 1)
-      ), 0)
-        into v_overlap
-        from student_pauses sp
-        where sp.student_id = p_student_id
-          and sp.paused_until >= v_start
-          and sp.paused_from < v_naive_next;
+      -- See student_cycle_boundaries above for why this has to be a
+      -- fixed-point loop rather than a single addition: a pause long enough
+      -- to still cover the pushed-out candidate would otherwise get frozen
+      -- into student_payment_overrides as a "confirmed" payment date that's
+      -- still inside the pause.
+      v_candidate_next := v_naive_next;
+      loop
+        select coalesce(sum(
+          greatest(0, least(sp.paused_until, v_candidate_next - 1) - greatest(sp.paused_from, v_start) + 1)
+        ), 0)
+          into v_overlap
+          from student_pauses sp
+          where sp.student_id = p_student_id
+            and sp.paused_until >= v_start
+            and sp.paused_from < v_candidate_next;
 
-      v_candidate_next := v_naive_next + v_overlap;
+        v_next_candidate := v_naive_next + v_overlap;
+        exit when v_next_candidate = v_candidate_next;
+        v_candidate_next := v_next_candidate;
+      end loop;
       -- A plain month-length clamp (e.g. payment_day=31 landing on Feb 28)
       -- is NOT a disturbance — payment_day must stay 31 so March goes back
       -- to the 31st, not get permanently narrowed to 28.

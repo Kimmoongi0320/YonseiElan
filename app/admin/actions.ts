@@ -29,6 +29,7 @@ import {
 import {
   deleteStudentPaymentOverride,
   freezeStudentPaymentHistory,
+  getProjectedPaymentDate,
   listStudentPaymentOverrides,
   setStudentPaymentOverride,
   type StudentPaymentOverride,
@@ -215,6 +216,8 @@ export async function getAttendanceCalendarDataAction(
   pauses: StudentPause[];
   monthPauses: StudentPause[];
   paymentOverrides: StudentPaymentOverride[];
+  projectedPaymentDate: string | null;
+  nextMonthProjectedPaymentDate: string | null;
 }> {
   await requireAdminSession();
 
@@ -234,7 +237,26 @@ export async function getAttendanceCalendarDataAction(
     listStudentPaymentOverrides(studentId),
   ]);
 
-  return { attendance, pauses, monthPauses, paymentOverrides };
+  // The projection is only ever consulted when the viewed month has no
+  // confirmed override yet (see resolvedPaymentDate in attendance-calendar.tsx)
+  // — skip the extra round trip for the common case of a past or
+  // already-set month, where its result would just be thrown away.
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+  const hasOverrideForMonth = paymentOverrides.some((o) => o.paymentDate.startsWith(monthPrefix));
+  const projectedPaymentDate = hasOverrideForMonth ? null : await getProjectedPaymentDate(studentId, year, month);
+
+  // Same projection, one month ahead — feeds the "다음 달 결제일" bubble next
+  // to the calendar's forward-nav button, so a pause's delay is visible
+  // before the admin even navigates there.
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextMonthPrefix = `${nextYear}-${String(nextMonth).padStart(2, "0")}-`;
+  const hasOverrideForNextMonth = paymentOverrides.some((o) => o.paymentDate.startsWith(nextMonthPrefix));
+  const nextMonthProjectedPaymentDate = hasOverrideForNextMonth
+    ? null
+    : await getProjectedPaymentDate(studentId, nextYear, nextMonth);
+
+  return { attendance, pauses, monthPauses, paymentOverrides, projectedPaymentDate, nextMonthProjectedPaymentDate };
 }
 
 export async function createStudentPauseAction(

@@ -58,6 +58,25 @@ export async function freezeStudentPaymentHistory(studentId: string): Promise<vo
   if (error) throw error;
 }
 
+// Projects the payment date for a calendar month that hasn't been frozen
+// yet — i.e. one still ahead of (or straddling) today — accounting for any
+// pause delay immediately rather than waiting for freezeStudentPaymentHistory
+// to commit it after the fact. Returns null if student.paymentDay isn't set,
+// or in the rare case a long enough pause pushes the cycle boundary out of
+// the requested month entirely; callers should fall back to the naive
+// payment_day clamp in that case.
+export async function getProjectedPaymentDate(studentId: string, year: number, month: number): Promise<string | null> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase.rpc("projected_payment_date_for_month", {
+    p_student_id: studentId,
+    p_year: year,
+    p_month: month,
+  });
+
+  if (error) throw error;
+  return data ?? null;
+}
+
 // Sets this student's confirmed payment date for the given calendar month —
 // replacing any existing override in that same month first, so setting one
 // always means "this month's date is X" rather than silently accumulating a
@@ -72,6 +91,17 @@ export async function setStudentPaymentOverride(
   if (!DATE_RE.test(paymentDate)) return { error: "날짜 형식이 올바르지 않습니다." };
 
   const supabase = getSupabaseServerClient();
+
+  const { data: overlappingPause, error: pauseError } = await supabase
+    .from("student_pauses")
+    .select("id")
+    .eq("student_id", studentId)
+    .lte("paused_from", paymentDate)
+    .gte("paused_until", paymentDate)
+    .maybeSingle();
+  if (pauseError) throw pauseError;
+  if (overlappingPause) return { error: "정지 기간에는 결제일을 지정할 수 없습니다." };
+
   const { start, nextStart } = monthRange(year, month);
 
   const { error: deleteError } = await supabase
