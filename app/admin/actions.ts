@@ -210,7 +210,13 @@ export async function setAttendanceMakeupDateAction(
 export async function getAttendanceCalendarDataAction(
   studentId: string,
   year: number,
-  month: number
+  month: number,
+  // The attendance page's server component already runs one catch-up freeze
+  // before this client ever mounts, and a no-op freeze call still costs a
+  // full round trip — so the calendar only pays for a second one on its
+  // very first fetch (covering direct client-side entry points) and skips
+  // it on every month-navigation refetch after that.
+  skipFreeze = false
 ): Promise<{
   attendance: Record<string, DayAttendanceInfo>;
   pauses: StudentPause[];
@@ -228,7 +234,9 @@ export async function getAttendanceCalendarDataAction(
   // Catches up any past, not-yet-recorded payment dates before reading them
   // back — regardless of which month is being viewed, so history never
   // falls behind. A no-op after the first call for a given day.
-  await freezeStudentPaymentHistory(studentId);
+  if (!skipFreeze) {
+    await freezeStudentPaymentHistory(studentId);
+  }
 
   const [attendance, pauses, monthPauses, paymentOverrides] = await Promise.all([
     getStudentMonthAttendance(studentId, year, month),
@@ -243,18 +251,20 @@ export async function getAttendanceCalendarDataAction(
   // already-set month, where its result would just be thrown away.
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
   const hasOverrideForMonth = paymentOverrides.some((o) => o.paymentDate.startsWith(monthPrefix));
-  const projectedPaymentDate = hasOverrideForMonth ? null : await getProjectedPaymentDate(studentId, year, month);
 
   // Same projection, one month ahead — feeds the "다음 달 결제일" bubble next
   // to the calendar's forward-nav button, so a pause's delay is visible
-  // before the admin even navigates there.
+  // before the admin even navigates there. Run alongside the current-month
+  // projection (rather than after it) since neither depends on the other.
   const nextYear = month === 12 ? year + 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
   const nextMonthPrefix = `${nextYear}-${String(nextMonth).padStart(2, "0")}-`;
   const hasOverrideForNextMonth = paymentOverrides.some((o) => o.paymentDate.startsWith(nextMonthPrefix));
-  const nextMonthProjectedPaymentDate = hasOverrideForNextMonth
-    ? null
-    : await getProjectedPaymentDate(studentId, nextYear, nextMonth);
+
+  const [projectedPaymentDate, nextMonthProjectedPaymentDate] = await Promise.all([
+    hasOverrideForMonth ? null : getProjectedPaymentDate(studentId, year, month),
+    hasOverrideForNextMonth ? null : getProjectedPaymentDate(studentId, nextYear, nextMonth),
+  ]);
 
   return { attendance, pauses, monthPauses, paymentOverrides, projectedPaymentDate, nextMonthProjectedPaymentDate };
 }

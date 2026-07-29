@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { TimeSelect } from "@/components/admin/time-select";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
@@ -131,6 +131,13 @@ export function AttendanceCalendar({ student }: Props) {
   // forward-nav button below, never by resolvedPaymentDate's general lookup.
   const [nextMonthProjectedPaymentDate, setNextMonthProjectedPaymentDate] = useState<string | null>(null);
 
+  // The attendance page's server component already runs one catch-up freeze
+  // before this ever mounts (see the [id]/attendance/page.tsx), and a no-op
+  // freeze RPC still costs a full round trip on every month navigation — so
+  // this component pays for at most one more, on its first fetch, and skips
+  // it on every refetch after that for as long as it stays mounted.
+  const hasFrozenRef = useRef(false);
+
   // Bundles the calendar grid's attendance data with both pause views
   // (all-time, for the management panel; month-scoped, for calendar-cell
   // tagging) into one request — they're always needed together on mount,
@@ -138,7 +145,8 @@ export function AttendanceCalendar({ student }: Props) {
   const fetchAll = (studentId: string, y: number, m: number) => {
     startLoadingTransition(async () => {
       try {
-        const result = await getAttendanceCalendarDataAction(studentId, y, m);
+        const result = await getAttendanceCalendarDataAction(studentId, y, m, hasFrozenRef.current);
+        hasFrozenRef.current = true;
         setData(result.attendance);
         setPauses(result.pauses);
         setMonthPauses(result.monthPauses);
