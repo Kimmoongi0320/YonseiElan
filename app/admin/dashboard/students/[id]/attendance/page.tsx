@@ -3,7 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeftIcon } from "@/components/icons";
 import { getStudentSummaryForAdmin } from "@/lib/students";
+import { freezeStudentPaymentHistory } from "@/lib/student-payment-overrides";
 import { AttendanceCalendar } from "@/components/admin/attendance-calendar";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function StudentAttendancePage({
   params,
@@ -16,6 +19,13 @@ export default async function StudentAttendancePage({
   }
 
   const { id } = await params;
+  // Must run before fetching the summary below — freeze can roll
+  // students.payment_day forward when a past cycle resolved via override or
+  // pause delay, and the badge/calendar on this page need that fresh value
+  // rather than the pre-freeze one.
+  if (UUID_RE.test(id)) {
+    await freezeStudentPaymentHistory(id);
+  }
   const student = await getStudentSummaryForAdmin(id);
   if (!student) notFound();
 
