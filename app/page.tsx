@@ -23,11 +23,11 @@ export default function Home() {
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center space-y-6 px-6 py-8 sm:space-y-10 sm:py-16">
         <div className="animate-fade-in-up text-center">
-          <p className="text-sm font-medium text-navy-900/50">
+          <p className="text-sm font-medium text-navy-900/70">
             안녕하세요, 연세엘랑 피아노 학원입니다
           </p>
           <h1 className="mt-2 text-xl font-bold leading-snug text-navy-900 sm:mt-3 sm:text-3xl">
-            등원 또는 하원을 선택해 주세요
+            전화번호 뒤 4자리를 입력해 주세요
           </h1>
         </div>
 

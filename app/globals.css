@@ -87,6 +87,21 @@ body {
   animation: shake 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+@keyframes pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-pop {
+  animation: pop 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* `dvh` is an unrecognized unit on iOS Safari < 15.4, which makes the whole
    min-height declaration invalid there — falls back to 100vh, then upgrades
    to 100dvh where supported. */

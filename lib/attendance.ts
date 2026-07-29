@@ -50,13 +50,6 @@ export async function getOpenRecord(studentId: string): Promise<OpenAttendanceRe
   return { id: data.id, checkInAt: new Date(data.check_in_at).getTime() };
 }
 
-export async function getActiveRecord(studentId: string): Promise<AttendanceRecord | null> {
-  const open = await getOpenRecord(studentId);
-  if (!open) return null;
-
-  return { checkInAt: open.checkInAt, checkOutAt: null };
-}
-
 // Closes out a stale (pre-today) open record left behind by a failed 22:00
 // auto-checkout cron run, so the student can check in again today. Scoped to
 // the specific record id and still-open state, so it's a no-op if the cron
@@ -79,7 +72,7 @@ async function insertCheckInRecord(studentId: string, conflictMessage?: string) 
   const { data, error } = await supabase
     .from("attendance_records")
     .insert({ student_id: studentId })
-    .select("check_in_at")
+    .select("id, check_in_at")
     .single();
 
   if (error) {
@@ -95,7 +88,7 @@ async function insertCheckInRecord(studentId: string, conflictMessage?: string) 
 
   return {
     ok: true as const,
-    record: { checkInAt: new Date(data.check_in_at).getTime(), checkOutAt: null },
+    record: { id: data.id, checkInAt: new Date(data.check_in_at).getTime(), checkOutAt: null },
   };
 }
 
@@ -129,12 +122,13 @@ async function performCheckOut(studentId: string) {
     .update({ check_out_at: new Date().toISOString() })
     .eq("student_id", studentId)
     .is("check_out_at", null)
-    .select("check_in_at, check_out_at")
+    .select("id, check_in_at, check_out_at")
     .single();
 
   if (error) throw error;
 
   return {
+    id: data.id,
     checkInAt: new Date(data.check_in_at).getTime(),
     checkOutAt: new Date(data.check_out_at as string).getTime(),
   };
@@ -216,4 +210,68 @@ export async function adminMarkPresentToday(studentId: string): Promise<void> {
   }
 
   await insertCheckInRecord(studentId);
+}
+
+export type AttendanceAction = "check-in" | "check-out";
+
+// Kiosk single-tap flow: the student taps their name and the system decides
+// which half of the day's cycle comes next, instead of making them pick a
+// mode up front. No record today -> check-in; an open record from today ->
+// check-out; today's cycle already closed -> reported back with no write,
+// so a stray extra tap can't create a second record for the same day.
+export async function resolveAttendance(studentId: string) {
+  const now = Date.now();
+  const open = await getOpenRecord(studentId);
+
+  if (open) {
+    if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) {
+      const result = await checkOut(studentId, { checkInAt: open.checkInAt, checkOutAt: null });
+      return { ...result, action: "check-out" as const };
+    }
+
+    // Stale record from before today — checkIn() closes it out and inserts a fresh one.
+    const result = await checkIn(studentId, open);
+    return { ...result, action: "check-in" as const };
+  }
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .select("check_in_at")
+    .eq("student_id", studentId)
+    .gte("check_in_at", startOfTodayKstIso(now))
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+
+  if (data) {
+    return { ok: false as const, action: "already-completed" as const, reason: "already-completed" as const };
+  }
+
+  const result = await checkIn(studentId, null);
+  return { ...result, action: "check-in" as const };
+}
+
+// Reverses a just-made kiosk tap within the undo window. Scoped to the
+// specific record id (and student, defense in depth) so it can't ever touch
+// a different check-in/out made in the meantime.
+export async function undoCheckIn(recordId: string, studentId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from("attendance_records")
+    .delete()
+    .eq("id", recordId)
+    .eq("student_id", studentId)
+    .is("check_out_at", null);
+  if (error) throw error;
+}
+
+export async function undoCheckOut(recordId: string, studentId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  const { error } = await supabase
+    .from("attendance_records")
+    .update({ check_out_at: null })
+    .eq("id", recordId)
+    .eq("student_id", studentId);
+  if (error) throw error;
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findStudentById } from "@/lib/students";
-import { checkIn, getOpenRecord } from "@/lib/attendance";
+import { resolveAttendance } from "@/lib/attendance";
 
 export async function POST(request: Request) {
   const { studentId } = await request.json();
@@ -9,18 +9,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, reason: "not-found" }, { status: 404 });
   }
 
-  // Independent reads on different tables — run them together instead of
-  // sequentially. The insert inside checkIn() still waits on both results.
-  const [student, open] = await Promise.all([findStudentById(studentId), getOpenRecord(studentId)]);
-
+  const student = await findStudentById(studentId);
   if (!student) {
     return NextResponse.json({ ok: false, reason: "not-found" }, { status: 404 });
   }
 
-  const result = await checkIn(studentId, open);
+  const result = await resolveAttendance(studentId);
   if (!result.ok) {
     return NextResponse.json(result, { status: 409 });
   }
 
-  return NextResponse.json({ ok: true, checkInAt: result.record.checkInAt });
+  return NextResponse.json(result);
 }

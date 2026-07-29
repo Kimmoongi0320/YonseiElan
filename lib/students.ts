@@ -51,17 +51,29 @@ function startOfTodayKstIso(nowMs: number): string {
   return new Date(kstMidnightUtcMs).toISOString();
 }
 
-export async function findStudentsByPhone(phoneLast4: string): Promise<Student[]> {
+export type StudentLookupResult = {
+  id: string;
+  name: string;
+  age: number | null;
+  classDays: DayKey[];
+};
+
+export async function findStudentsByPhone(phoneLast4: string): Promise<StudentLookupResult[]> {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("students")
-    .select("id, name, parent_phone")
+    .select("id, name, age, class_days")
     .eq("parent_phone_last4", phoneLast4)
     .eq("is_active", true);
 
   if (error) throw error;
 
-  return (data ?? []).map((s) => ({ id: s.id, name: s.name, parentPhone: s.parent_phone }));
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    age: s.age,
+    classDays: (s.class_days ?? []) as DayKey[],
+  }));
 }
 
 export async function findStudentById(id: string): Promise<Student | null> {
