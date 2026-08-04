@@ -8,6 +8,12 @@ export type MonthOverrideRow = {
   makeupTime: string | null;
 };
 
+export type MonthPauseRow = {
+  studentId: string;
+  pausedFrom: string;
+  pausedUntil: string;
+};
+
 function pad2(n: number): string {
   return n.toString().padStart(2, "0");
 }
@@ -48,5 +54,31 @@ export async function getMonthScheduleOverrides(year: number, month: number): Pr
     status: row.status as "present" | "absent",
     makeupDate: row.makeup_date,
     makeupTime: row.makeup_time,
+  }));
+}
+
+// Same all-students-at-once shape as getMonthScheduleOverrides above, but for
+// student_pauses: any pause that overlaps the given month at all, so the
+// schedule calendar can hide a paused student's regular class days even when
+// the pause started in an earlier month or extends into a later one.
+export async function getMonthSchedulePauses(year: number, month: number): Promise<MonthPauseRow[]> {
+  const startDate = ymd(year, month, 1);
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const endDate = ymd(nextYear, nextMonth, 1);
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("student_pauses")
+    .select("student_id, paused_from, paused_until")
+    .lt("paused_from", endDate)
+    .gte("paused_until", startDate);
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    studentId: row.student_id,
+    pausedFrom: row.paused_from,
+    pausedUntil: row.paused_until,
   }));
 }

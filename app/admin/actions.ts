@@ -16,7 +16,12 @@ import {
 import { NOTIFICATION_TEMPLATES } from "@/lib/notifications";
 import { DAY_LABELS, isDayKey, TIME_RE, type ClassTimes, type DayKey } from "@/lib/schedule";
 import { updateAdminPin, verifyAdminPin } from "@/lib/admin-settings";
-import { getMonthScheduleOverrides, type MonthOverrideRow } from "@/lib/schedule-calendar";
+import {
+  getMonthScheduleOverrides,
+  getMonthSchedulePauses,
+  type MonthOverrideRow,
+  type MonthPauseRow,
+} from "@/lib/schedule-calendar";
 import {
   createStudentPause,
   deleteStudentPause,
@@ -351,6 +356,16 @@ export async function getScheduleMonthOverridesAction(year: number, month: numbe
   }
 
   return getMonthScheduleOverrides(year, month);
+}
+
+export async function getScheduleMonthPausesAction(year: number, month: number): Promise<MonthPauseRow[]> {
+  await requireAdminSession();
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("Invalid year/month");
+  }
+
+  return getMonthSchedulePauses(year, month);
 }
 
 export type NotificationFormState = { error: string } | null;

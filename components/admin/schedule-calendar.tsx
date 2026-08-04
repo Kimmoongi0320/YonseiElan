@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { Modal } from "@/components/modal";
-import { getScheduleMonthOverridesAction } from "@/app/admin/actions";
-import type { MonthOverrideRow } from "@/lib/schedule-calendar";
+import { getScheduleMonthOverridesAction, getScheduleMonthPausesAction } from "@/app/admin/actions";
+import type { MonthOverrideRow, MonthPauseRow } from "@/lib/schedule-calendar";
 import type { ScheduleStudent } from "@/lib/students";
 import { dayKeyForDateStr } from "@/lib/schedule";
 
@@ -192,6 +192,7 @@ export function ScheduleCalendar({ students }: Props) {
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState(today.month);
   const [overrides, setOverrides] = useState<MonthOverrideRow[]>([]);
+  const [pauses, setPauses] = useState<MonthPauseRow[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [loading, startLoadingTransition] = useTransition();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -203,8 +204,12 @@ export function ScheduleCalendar({ students }: Props) {
   useEffect(() => {
     startLoadingTransition(async () => {
       try {
-        const result = await getScheduleMonthOverridesAction(year, month);
-        setOverrides(result);
+        const [overridesResult, pausesResult] = await Promise.all([
+          getScheduleMonthOverridesAction(year, month),
+          getScheduleMonthPausesAction(year, month),
+        ]);
+        setOverrides(overridesResult);
+        setPauses(pausesResult);
         setLoadError(false);
       } catch (error) {
         console.error("Failed to load schedule overrides", error);
@@ -232,11 +237,14 @@ export function ScheduleCalendar({ students }: Props) {
     return map;
   }, [overrides]);
 
+  const isPausedOn = (studentId: string, dateStr: string): boolean =>
+    pauses.some((p) => p.studentId === studentId && dateStr >= p.pausedFrom && dateStr <= p.pausedUntil);
+
   const entriesForDate = (dateStr: string): Entry[] => {
     const weekday = dayKeyForDateStr(dateStr);
     const regular: Entry[] = weekday
       ? students
-          .filter((s) => s.classDays.includes(weekday))
+          .filter((s) => s.classDays.includes(weekday) && !isPausedOn(s.id, dateStr))
           .map((s) => ({
             studentId: s.id,
             name: s.name,
