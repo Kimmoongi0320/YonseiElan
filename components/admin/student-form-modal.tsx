@@ -30,6 +30,15 @@ function handlePhoneInput(event: ChangeEvent<HTMLInputElement>) {
   event.target.value = formatPhoneNumber(digits);
 }
 
+// Convenience default for a brand-new student's start date input — plain
+// local date, since this is just a prefill the admin can freely change (the
+// actual lock decision is computed server-side in KST, see startDateLocked).
+function todayLocalDateStr(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -110,6 +119,26 @@ export function StudentFormModal({ open, onClose, student }: Props) {
             placeholder="010-1234-5678"
             className={inputClass}
           />
+        </label>
+
+        <label className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">
+          시작일
+          <input
+            type="date"
+            name="startDate"
+            required
+            disabled={student?.startDateLocked ?? false}
+            defaultValue={student?.startDate ?? todayLocalDateStr()}
+            className={`${inputClass} disabled:cursor-not-allowed disabled:opacity-60`}
+          />
+          {student?.startDateLocked && (
+            <>
+              <input type="hidden" name="startDate" value={student.startDate} />
+              <span className="text-xs font-normal text-navy-900/40">
+                시작일이 지나 더 이상 변경할 수 없습니다.
+              </span>
+            </>
+          )}
         </label>
 
         <div className="flex flex-col space-y-1.5 text-sm font-medium text-navy-900/70">

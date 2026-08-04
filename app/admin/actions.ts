@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createStudent, deleteStudent, findStudentById, updateStudent } from "@/lib/students";
+import { createStudent, deleteStudent, findStudentForEdit, todayKstDateStr, updateStudent } from "@/lib/students";
 import { adminCheckOut } from "@/lib/attendance";
 import {
   clearAttendanceDayRecords,
@@ -69,6 +69,7 @@ export async function upsertStudentAction(
   const memo = String(formData.get("memo") ?? "").trim();
   const classDaysRaw = formData.getAll("classDays").map(String);
   const paymentDayRaw = String(formData.get("paymentDay") ?? "").trim();
+  const startDateRaw = String(formData.get("startDate") ?? "").trim();
 
   if (!name) {
     return { error: "이름을 입력해주세요." };
@@ -106,6 +107,30 @@ export async function upsertStudentAction(
     }
   }
 
+  let startDate: string;
+  if (id) {
+    const existing = await findStudentForEdit(id);
+    if (!existing) {
+      return { error: "학생 정보를 찾을 수 없습니다." };
+    }
+    // Once start_date has passed, it's locked — ignore whatever the form
+    // submitted (the UI disables the field, but the server is the real
+    // guard) and keep the existing value.
+    if (existing.startDate <= todayKstDateStr()) {
+      startDate = existing.startDate;
+    } else {
+      if (!DATE_RE.test(startDateRaw)) {
+        return { error: "시작일을 올바르게 입력해주세요." };
+      }
+      startDate = startDateRaw;
+    }
+  } else {
+    if (!DATE_RE.test(startDateRaw)) {
+      return { error: "시작일을 올바르게 입력해주세요." };
+    }
+    startDate = startDateRaw;
+  }
+
   const input = {
     name,
     age,
@@ -114,12 +139,10 @@ export async function upsertStudentAction(
     classDays,
     classTimes,
     paymentDay,
+    startDate,
   };
 
   if (id) {
-    if (!(await findStudentById(id))) {
-      return { error: "학생 정보를 찾을 수 없습니다." };
-    }
     await updateStudent(id, input);
   } else {
     await createStudent(input);

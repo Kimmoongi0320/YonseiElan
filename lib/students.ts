@@ -18,6 +18,10 @@ export type AdminStudent = {
   classDays: DayKey[];
   classTimes: ClassTimes;
   paymentDay: number | null;
+  startDate: string;
+  // True once today (KST) has reached startDate — the admin form must treat
+  // startDate as read-only from that point on.
+  startDateLocked: boolean;
   status: AttendanceStatus;
   checkInAt: number | null;
   checkOutAt: number | null;
@@ -35,6 +39,7 @@ export type StudentInput = {
   classDays: DayKey[];
   classTimes: ClassTimes;
   paymentDay: number | null;
+  startDate: string;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,6 +54,12 @@ function startOfTodayKstIso(nowMs: number): string {
   const kstDayIndex = Math.floor((nowMs + KST_OFFSET_MS) / 86_400_000);
   const kstMidnightUtcMs = kstDayIndex * 86_400_000 - KST_OFFSET_MS;
   return new Date(kstMidnightUtcMs).toISOString();
+}
+
+// "YYYY-MM-DD" for today in KST — used to decide whether a student's
+// start_date has already passed (and its edit lock should apply).
+export function todayKstDateStr(nowMs: number = Date.now()): string {
+  return startOfTodayKstIso(nowMs).slice(0, 10);
 }
 
 export type StudentLookupResult = {
@@ -93,7 +104,27 @@ export async function findStudentById(id: string): Promise<Student | null> {
   return { id: data.id, name: data.name, parentPhone: data.parent_phone };
 }
 
-export type AdminStudentSummary = Pick<AdminStudent, "id" | "name" | "classDays" | "paymentDay">;
+// Narrow lookup for upsertStudentAction's start_date lock check — kept
+// separate from findStudentById (used by the kiosk check-in flow above),
+// which has no need for start_date.
+export async function findStudentForEdit(id: string): Promise<{ id: string; startDate: string } | null> {
+  if (!UUID_RE.test(id)) return null;
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, start_date")
+    .eq("id", id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return { id: data.id, startDate: data.start_date };
+}
+
+export type AdminStudentSummary = Pick<AdminStudent, "id" | "name" | "classDays" | "paymentDay" | "startDate">;
 
 export async function getStudentSummaryForAdmin(id: string): Promise<AdminStudentSummary | null> {
   if (!UUID_RE.test(id)) return null;
@@ -101,7 +132,7 @@ export async function getStudentSummaryForAdmin(id: string): Promise<AdminStuden
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase
     .from("students")
-    .select("id, name, class_days, payment_day")
+    .select("id, name, class_days, payment_day, start_date")
     .eq("id", id)
     .eq("is_active", true)
     .maybeSingle();
@@ -114,6 +145,7 @@ export async function getStudentSummaryForAdmin(id: string): Promise<AdminStuden
     name: data.name,
     classDays: (data.class_days ?? []) as DayKey[],
     paymentDay: data.payment_day,
+    startDate: data.start_date,
   };
 }
 
@@ -129,7 +161,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
     supabase
       .from("students")
       .select(
-        "id, name, age, parent_phone, memo, class_days, class_times, payment_day, attendance_records(check_in_at, check_out_at)"
+        "id, name, age, parent_phone, memo, class_days, class_times, payment_day, start_date, attendance_records(check_in_at, check_out_at)"
       )
       .eq("is_active", true)
       .gte("attendance_records.check_in_at", startOfTodayKstIso(now))
@@ -147,6 +179,7 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
   const sessionCountByStudent = new Map(
     (sessionCountsResult.data ?? []).map((r) => [r.student_id, r.session_count])
   );
+  const todayKst = todayKstDateStr(now);
 
   return students.map((s) => {
     const latest = s.attendance_records?.[0];
@@ -173,6 +206,8 @@ export async function listStudentsForAdmin(): Promise<AdminStudent[]> {
       classDays: (s.class_days ?? []) as DayKey[],
       classTimes: (s.class_times ?? {}) as ClassTimes,
       paymentDay: s.payment_day,
+      startDate: s.start_date,
+      startDateLocked: s.start_date <= todayKst,
       status,
       checkInAt,
       checkOutAt,
@@ -191,6 +226,7 @@ export async function createStudent(input: StudentInput): Promise<void> {
     class_days: input.classDays,
     class_times: input.classTimes,
     payment_day: input.paymentDay,
+    start_date: input.startDate,
   });
 
   if (error) throw error;
@@ -208,6 +244,7 @@ export async function updateStudent(id: string, input: StudentInput): Promise<vo
       class_days: input.classDays,
       class_times: input.classTimes,
       payment_day: input.paymentDay,
+      start_date: input.startDate,
     })
     .eq("id", id);
 

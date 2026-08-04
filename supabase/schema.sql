@@ -32,6 +32,13 @@ alter table students add column if not exists payment_day integer check (payment
 -- Migration for pre-existing databases created before class_times was added.
 alter table students add column if not exists class_times jsonb not null default '{}'::jsonb;
 
+-- Migration for pre-existing databases created before start_date was added.
+-- Backfilled from created_at for existing rows, then locked to NOT NULL —
+-- every student must have a start date going forward.
+alter table students add column if not exists start_date date;
+update students set start_date = created_at::date where start_date is null;
+alter table students alter column start_date set not null;
+
 comment on column students.parent_phone is '보호자 전화번호 (하이픈 포함 원문, 예: 010-1234-5678)';
 comment on column students.parent_phone_last4 is '키오스크 조회용 뒤 4자리 — parent_phone에서 자동 계산됨';
 comment on column students.memo is '관리자 메모 (특이사항 등)';
@@ -39,6 +46,8 @@ comment on column students.class_days is '수업 요일(월~토) — mon/tue/wed
 comment on column students.class_times is
   '요일별 등원 시간 — {"mon":"16:00","wed":"17:00"} 형태로 class_days에 포함된 요일만 키로 가짐. 관리자 일정 달력 표시용.';
 comment on column students.payment_day is '매월 결제일 (1~31) — 출석 달력에 표시용, 선택 입력';
+comment on column students.start_date is
+  '학생 등록 시작일 — 결제 주기/회차 카운트가 시작되는 기준일. 이 날짜가 지나면(오늘 >= start_date) 관리자 화면에서 더 이상 수정할 수 없다(app 레이어에서 강제).';
 
 create index if not exists students_parent_phone_last4_idx
   on students (parent_phone_last4)
@@ -174,47 +183,34 @@ comment on table student_payment_overrides is
   '학생별 확정된 결제일들의 시간순 기록(달 단위 키 없음). 관리자가 특정 회차의 실제 결제일을 미리 지정해두거나, freeze_student_payment_history()가 이미 지난 회차의 실제 결제일을 조회 시점에 자동으로 기록한다. student_cycle_boundaries는 매 단계 직전 시작일 이후 가장 가까운 이 테이블의 날짜를 다음 결제일로 우선 사용하고, 없으면 payment_day + 정지 지연으로 계산한다.';
 
 -- ---------------------------------------------------------------------------
--- payment_cycle_start_date / get_student_session_counts — backs the "n회차"
+-- student_cycle_boundaries / get_student_session_counts — backs the "n회차"
 -- badge on the admin dashboard's student list. Computed in SQL (one row per
 -- student out) rather than pulling raw attendance rows into the app and
 -- counting there, so the response size stays bounded by student count
 -- instead of by attendance history length as the roster grows.
 -- ---------------------------------------------------------------------------
-create or replace function payment_cycle_start_date(payment_day integer, ref_date date)
-returns date
-language sql
-immutable
-as $$
-  select case
-    when extract(day from ref_date)::int >= least(
-      payment_day,
-      extract(day from (date_trunc('month', ref_date) + interval '1 month - 1 day'))::int
-    )
-    then date_trunc('month', ref_date)::date
-      + (least(payment_day, extract(day from (date_trunc('month', ref_date) + interval '1 month - 1 day'))::int) - 1)
-    else date_trunc('month', ref_date - interval '1 month')::date
-      + (least(
-          payment_day,
-          extract(day from (date_trunc('month', ref_date - interval '1 month') + interval '1 month - 1 day'))::int
-         ) - 1)
-  end;
-$$;
+-- Superseded by students.start_date anchoring the first cycle boundary
+-- directly (see student_cycle_boundaries below) — no longer called anywhere.
+drop function if exists payment_cycle_start_date(integer, date);
 
-comment on function payment_cycle_start_date(integer, date) is
-  '결제일(payment_day, 1~31)을 기준으로 ref_date가 속한 결제 주기의 시작일을 구한다. 그 달에 해당 일자가 없으면(예: 31일인데 2월) 그 달 마지막 날로 clamp.';
-
--- Walks the student's cycle boundaries forward, month by month from a seed
--- date safely before any of their pauses, delaying each naive monthly
--- boundary by however many paused days fall inside that cycle — so a pause
--- doesn't just get excluded from the count, it also pushes back the point
--- where the NEXT cycle (and the "n회차" reset that comes with it) begins.
--- Stops as soon as a boundary lands after ref_date, so cycle_start is always
--- the start of whichever (possibly delayed) cycle ref_date currently falls
--- in — critically, this does NOT jump past pre-pause days still inside the
--- current cycle, unlike a naive "shift start by total pause overlap" would;
--- shifting the start itself would silently drop pre-pause attendance from
--- the count instead of just skipping the paused days (already handled by
--- the not-exists pause checks in get_student_session_counts below).
+-- Walks the student's cycle boundaries forward starting from the student's
+-- start_date, delaying each naive monthly boundary by however many paused
+-- days fall inside that cycle — so a pause doesn't just get excluded from
+-- the count, it also pushes back the point where the NEXT cycle (and the
+-- "n회차" reset that comes with it) begins. Stops as soon as a boundary
+-- lands after ref_date, so cycle_start is always the start of whichever
+-- (possibly delayed) cycle ref_date currently falls in — critically, this
+-- does NOT jump past pre-pause days still inside the current cycle, unlike
+-- a naive "shift start by total pause overlap" would; shifting the start
+-- itself would silently drop pre-pause attendance from the count instead of
+-- just skipping the paused days (already handled by the not-exists pause
+-- checks in get_student_session_counts below). The very first boundary
+-- computed from start_date checks whether payment_day still hasn't happened
+-- yet in start_date's own month and uses that if so — e.g. starting the 2nd
+-- with payment_day the 15th makes the first cycle end on that same month's
+-- 15th, not skip ahead to next month's — while every later boundary (always
+-- computed from an already payment_day-aligned v_start) falls through to
+-- the next-month case exactly as before.
 drop function if exists payment_cycle_start_date_for_student(uuid, date);
 
 create or replace function student_cycle_boundaries(p_student_id uuid, ref_date date)
@@ -224,30 +220,23 @@ stable
 as $$
 declare
   v_payment_day integer;
-  v_seed date;
+  v_start_date date;
   v_start date;
   v_override_date date;
+  v_this_month date;
+  v_this_month_candidate date;
   v_next_month date;
   v_naive_next date;
   v_candidate_next date;
   v_next_candidate date;
   v_overlap integer;
 begin
-  select payment_day into v_payment_day from students where id = p_student_id;
-  if v_payment_day is null then
+  select payment_day, start_date into v_payment_day, v_start_date from students where id = p_student_id;
+  if v_payment_day is null or v_start_date > ref_date then
     return;
   end if;
 
-  -- Bounded by ref_date as well as the earliest pause: a pause registered
-  -- entirely in the future (the normal case — pauses are always registered
-  -- with both dates up front, often before they start) must not push the
-  -- seed past today, or the walk below starts from a cycle that's already
-  -- ahead of ref_date and never finds today's real cycle_start.
-  select least(ref_date, coalesce(min(sp.paused_from), ref_date)) - 40 into v_seed
-    from student_pauses sp
-    where sp.student_id = p_student_id;
-
-  v_start := payment_cycle_start_date(v_payment_day, v_seed);
+  v_start := v_start_date;
 
   loop
     -- The nearest confirmed payment date after the current start is
@@ -263,12 +252,30 @@ begin
     if v_override_date is not null then
       v_candidate_next := v_override_date;
     else
-      v_next_month := (date_trunc('month', v_start) + interval '1 month')::date;
-      v_naive_next := v_next_month
+      -- Try this month's payment_day occurrence first — only relevant on
+      -- the very first cycle, where v_start is start_date and may fall
+      -- before payment_day in its own month (e.g. start_date the 2nd,
+      -- payment_day the 15th). On every later cycle v_start is already
+      -- payment_day-aligned, so "this month's occurrence" equals v_start
+      -- itself (not strictly after it) and this always falls through to
+      -- the next-month branch below, same as before.
+      v_this_month := date_trunc('month', v_start)::date;
+      v_this_month_candidate := v_this_month
         + (least(
             v_payment_day,
-            extract(day from (v_next_month + interval '1 month - 1 day'))::int
+            extract(day from (v_this_month + interval '1 month - 1 day'))::int
            ) - 1);
+
+      if v_this_month_candidate > v_start then
+        v_naive_next := v_this_month_candidate;
+      else
+        v_next_month := (v_this_month + interval '1 month')::date;
+        v_naive_next := v_next_month
+          + (least(
+              v_payment_day,
+              extract(day from (v_next_month + interval '1 month - 1 day'))::int
+             ) - 1);
+      end if;
 
       -- A single addition of "paused days inside [v_start, naive_next)" can
       -- undershoot when a pause is long enough to still cover the pushed-out
@@ -305,7 +312,7 @@ end;
 $$;
 
 comment on function student_cycle_boundaries(uuid, date) is
-  '학생의 결제일(payment_day) 규칙에 정지 기간 지연을 반영해서, ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. 정지가 있었던 기간만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다. 밀린 날짜가 다시 (같거나 다른) 정지 기간과 겹치면 겹치지 않을 때까지 반복해서 더 밀어낸다. 매 단계마다 직전 시작일 이후 가장 가까운 student_payment_overrides 행이 있으면 그 날짜를 그대로 다음 결제일로 쓰고, 없으면 payment_day/정지 지연 계산을 쓴다. 읽기 전용이며, payment_day 갱신과 과거 회차 고정은 freeze_student_payment_history()가 담당한다.';
+  '학생의 등록 시작일(start_date)을 첫 사이클의 시작점으로 고정하고, 결제일(payment_day) 규칙과 정지 기간 지연을 반영해서 ref_date가 속한 결제 주기의 시작일과 다음 결제일을 함께 구한다. start_date가 ref_date보다 미래면 아직 시작된 사이클이 없으므로 빈 결과를 반환한다. 첫 사이클의 다음 결제일은 start_date가 속한 달의 payment_day가 아직 안 지났으면 그 날짜를, 이미 지났으면 다음 달의 payment_day를 쓴다(예: 2일에 등록, payment_day=15면 이번 달 15일이 다음 결제일). 정지가 있었던 기간만큼 다음 결제일이 뒤로 밀리며, 그 지연은 이후 주기에도 누적 반영된다. 밀린 날짜가 다시 (같거나 다른) 정지 기간과 겹치면 겹치지 않을 때까지 반복해서 더 밀어낸다. 매 단계마다 직전 시작일 이후 가장 가까운 student_payment_overrides 행이 있으면 그 날짜를 그대로 다음 결제일로 쓰고, 없으면 payment_day/정지 지연 계산을 쓴다. 읽기 전용이며, payment_day 갱신과 과거 회차 고정은 freeze_student_payment_history()가 담당한다.';
 
 -- Read-only projection of the payment date for a given calendar month,
 -- backing the attendance calendar's "이 달 결제일" display. Reuses
@@ -348,9 +355,11 @@ language plpgsql
 as $$
 declare
   v_payment_day integer;
-  v_seed date;
+  v_start_date date;
   v_start date;
   v_override_date date;
+  v_this_month date;
+  v_this_month_candidate date;
   v_next_month date;
   v_naive_next date;
   v_candidate_next date;
@@ -361,16 +370,12 @@ declare
 begin
   v_ref := least(p_ref_date, (now() at time zone 'Asia/Seoul')::date - 1);
 
-  select payment_day into v_payment_day from students where id = p_student_id;
-  if v_payment_day is null then
+  select payment_day, start_date into v_payment_day, v_start_date from students where id = p_student_id;
+  if v_payment_day is null or v_start_date > v_ref then
     return;
   end if;
 
-  select least(v_ref, coalesce(min(sp.paused_from), v_ref)) - 40 into v_seed
-    from student_pauses sp
-    where sp.student_id = p_student_id;
-
-  v_start := payment_cycle_start_date(v_payment_day, v_seed);
+  v_start := v_start_date;
 
   loop
     select min(payment_date) into v_override_date
@@ -381,12 +386,25 @@ begin
       v_candidate_next := v_override_date;
       v_disturbed := true;
     else
-      v_next_month := (date_trunc('month', v_start) + interval '1 month')::date;
-      v_naive_next := v_next_month
+      -- See student_cycle_boundaries above for why this checks this month's
+      -- payment_day occurrence before falling back to next month's.
+      v_this_month := date_trunc('month', v_start)::date;
+      v_this_month_candidate := v_this_month
         + (least(
             v_payment_day,
-            extract(day from (v_next_month + interval '1 month - 1 day'))::int
+            extract(day from (v_this_month + interval '1 month - 1 day'))::int
            ) - 1);
+
+      if v_this_month_candidate > v_start then
+        v_naive_next := v_this_month_candidate;
+      else
+        v_next_month := (v_this_month + interval '1 month')::date;
+        v_naive_next := v_next_month
+          + (least(
+              v_payment_day,
+              extract(day from (v_next_month + interval '1 month - 1 day'))::int
+             ) - 1);
+      end if;
 
       -- See student_cycle_boundaries above for why this has to be a
       -- fixed-point loop rather than a single addition: a pause long enough

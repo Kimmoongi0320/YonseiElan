@@ -528,6 +528,7 @@ export function AttendanceCalendar({ student }: Props) {
               <input
                 type="date"
                 value={pauseFrom}
+                min={student.startDate}
                 disabled={pauseSaving}
                 onChange={(e) => setPauseFrom(e.target.value)}
                 className="rounded-xl border border-navy-900/10 bg-white px-3 py-1.5 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
@@ -568,7 +569,7 @@ export function AttendanceCalendar({ student }: Props) {
           <button
             type="button"
             onClick={() => {
-              setPauseFrom(todayStr);
+              setPauseFrom(todayStr < student.startDate ? student.startDate : todayStr);
               setPauseUntil("");
               setPauseFormOpen(true);
             }}
@@ -597,6 +598,9 @@ export function AttendanceCalendar({ student }: Props) {
               const saving = savingDates.has(dateStr);
               const isClassDay = isRegularClassDay(dateStr, student.classDays);
               const isPaymentDay = dateStr === resolvedPaymentDate(year, month);
+              const isStartDate = dateStr === student.startDate;
+              const isBeforeStart = dateStr < student.startDate;
+              const isSelected = dateStr === visibleSelectedDate;
               const paused = pauseForDate(dateStr) != null;
 
               const makeupLine =
@@ -623,28 +627,33 @@ export function AttendanceCalendar({ student }: Props) {
                 <button
                   key={dateStr}
                   type="button"
+                  disabled={isBeforeStart}
                   onClick={() => setSelectedDate(dateStr)}
-                  aria-label={`${month}월 ${day}일 선택`}
+                  aria-label={isBeforeStart ? `${month}월 ${day}일 (시작일 이전)` : `${month}월 ${day}일 선택`}
+                  title={isBeforeStart ? "시작일 이전이라 설정할 수 없어요" : undefined}
                   className={`relative flex min-h-[96px] flex-col items-start space-y-0.5 rounded-lg border p-1 text-left text-[10px] leading-tight transition-colors hover:brightness-95 sm:min-h-[130px] sm:space-y-1 sm:rounded-xl sm:p-2 sm:text-xs ${statusClassName} ${
-                    isToday ? "ring-2 ring-gold-500 ring-offset-1" : ""
-                  } ${saving ? "opacity-50" : ""}`}
+                    isSelected ? "ring-2 ring-navy-900 ring-offset-1" : isToday ? "ring-2 ring-gold-500 ring-offset-1" : ""
+                  } ${saving ? "opacity-50" : ""} ${isBeforeStart ? "cursor-not-allowed opacity-40 hover:brightness-100" : ""}`}
                 >
-                  {isPaymentDay && (
+                  <div className="flex w-full items-center justify-between">
                     <span
-                      className="absolute right-0.5 top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-indigo-500 text-[6px] font-bold text-white shadow-sm sm:h-3.5 sm:w-3.5 sm:text-[8px]"
-                      title="결제일"
+                      className={`${isClassDay ? "font-extrabold underline decoration-2 underline-offset-2" : "font-semibold"} ${
+                        isToday ? "text-gold-600" : "text-navy-900"
+                      }`}
                     >
-                      ₩
+                      {day}
                     </span>
-                  )}
+                    {isPaymentDay && (
+                      <span
+                        className="flex h-2.5 w-2.5 items-center justify-center rounded-full bg-indigo-500 text-[6px] font-bold text-white shadow-sm sm:h-3.5 sm:w-3.5 sm:text-[8px]"
+                        title="결제일"
+                      >
+                        ₩
+                      </span>
+                    )}
+                  </div>
 
-                  <span
-                    className={`${isClassDay ? "font-extrabold underline decoration-2 underline-offset-2" : "font-semibold"} ${
-                      isToday ? "text-gold-600" : "text-navy-900"
-                    }`}
-                  >
-                    {day}
-                  </span>
+                  {isStartDate && <span className="w-full font-medium text-violet-600">시작일</span>}
 
                   {paused ? (
                     <span className="w-full font-medium text-slate-500">정지</span>
@@ -690,6 +699,18 @@ export function AttendanceCalendar({ student }: Props) {
               </span>
             )}
           </div>
+
+          {visibleSelectedDate === student.startDate && (
+            <p className="flex items-center space-x-1.5 text-xs font-medium text-violet-600">
+              <span
+                className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-violet-500 text-[8px] font-bold text-white"
+                aria-hidden="true"
+              >
+                시
+              </span>
+              <span>이 학생의 등록 시작일이에요</span>
+            </p>
+          )}
 
           {student.paymentDay != null &&
             (() => {

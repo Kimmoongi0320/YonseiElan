@@ -12,6 +12,7 @@ export type Database = {
           class_days: string[];
           class_times: Record<string, string>;
           payment_day: number | null;
+          start_date: string;
           is_active: boolean;
           created_at: string;
         };
@@ -24,6 +25,7 @@ export type Database = {
           class_days?: string[];
           class_times?: Record<string, string>;
           payment_day?: number | null;
+          start_date: string;
           is_active?: boolean;
           created_at?: string;
         };
@@ -36,6 +38,7 @@ export type Database = {
           class_days?: string[];
           class_times?: Record<string, string>;
           payment_day?: number | null;
+          start_date?: string;
           is_active?: boolean;
         };
         Relationships: [];
