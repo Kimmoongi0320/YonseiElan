@@ -199,6 +199,37 @@ export async function adminCheckOut(studentId: string) {
   };
 }
 
+export type AdminBulkCheckOutRecord = {
+  studentId: string;
+  checkInAt: number;
+  checkOutAt: number;
+};
+
+// Bulk counterpart to adminCheckOut, used by the dashboard's checkbox-driven
+// "전체 하원 처리". One update covering every selected student instead of N
+// round trips; students with no open record (already checked out, or never
+// checked in today) simply don't match and are silently skipped, same as the
+// single-student version.
+export async function adminBulkCheckOut(studentIds: string[]): Promise<AdminBulkCheckOutRecord[]> {
+  if (studentIds.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .update({ check_out_at: new Date().toISOString() })
+    .in("student_id", studentIds)
+    .is("check_out_at", null)
+    .select("student_id, check_in_at, check_out_at");
+
+  if (error) throw error;
+
+  return (data ?? []).map((r) => ({
+    studentId: r.student_id,
+    checkInAt: new Date(r.check_in_at).getTime(),
+    checkOutAt: new Date(r.check_out_at as string).getTime(),
+  }));
+}
+
 // Backs the admin's "present" override for TODAY specifically (set via the
 // per-student attendance calendar): without this, marking a student present
 // only wrote to attendance_overrides, leaving the dashboard's live status —
@@ -207,12 +238,15 @@ export async function adminCheckOut(studentId: string) {
 // agree, unless one already exists for today (open or closed), in which case
 // this is a no-op. No operating-hours cutoff, since this is an explicit
 // admin correction rather than a self-service check-in.
-export async function adminMarkPresentToday(studentId: string): Promise<void> {
+//
+// Returns the new check-in's timestamp, or null if this was a no-op (already
+// recorded) — the caller uses that to decide whether an arrival alert is due.
+export async function adminMarkPresentToday(studentId: string): Promise<number | null> {
   const now = Date.now();
 
   const open = await getOpenRecord(studentId);
   if (open) {
-    if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) return;
+    if (isTodayInKst(new Date(open.checkInAt).toISOString(), now)) return null;
     await closeStaleRecord(open, now);
   } else {
     const supabase = getSupabaseServerClient();
@@ -224,10 +258,11 @@ export async function adminMarkPresentToday(studentId: string): Promise<void> {
       .limit(1)
       .maybeSingle();
     if (error) throw error;
-    if (data) return;
+    if (data) return null;
   }
 
-  await insertCheckInRecord(studentId);
+  const result = await insertCheckInRecord(studentId);
+  return result.ok ? result.record.checkInAt : null;
 }
 
 export type AttendanceAction = "check-in" | "check-out";
@@ -279,6 +314,39 @@ export async function undoCheckIn(recordId: string, studentId: string): Promise<
     .eq("student_id", studentId)
     .is("check_out_at", null);
   if (error) throw error;
+}
+
+// Used by the arrival-alert scheduler to check, after the undo window has
+// passed, whether the check-in survived — a "취소" tap deletes the row via
+// undoCheckIn above, which is how a cancellation suppresses the alert.
+export async function recordExists(recordId: string, studentId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .select("id")
+    .eq("id", recordId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data !== null;
+}
+
+// Used by the alert scheduler to check, after the undo window has passed,
+// whether a checkout survived — a "취소" tap reverts check_out_at back to
+// null via undoCheckOut below, which is how a cancellation suppresses the
+// departure alert.
+export async function isCheckedOut(recordId: string, studentId: string): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("attendance_records")
+    .select("check_out_at")
+    .eq("id", recordId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.check_out_at != null;
 }
 
 export async function undoCheckOut(recordId: string, studentId: string): Promise<void> {

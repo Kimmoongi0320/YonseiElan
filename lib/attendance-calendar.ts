@@ -1,5 +1,7 @@
 import { getSupabaseServerClient } from "./supabase/server";
 import { adminMarkPresentToday } from "./attendance";
+import { sendAdminAttendanceAlert } from "./attendance-alert";
+import { findStudentById } from "./students";
 import { TIME_RE, type DayKey } from "./schedule";
 
 export type DayAttendanceStatus = "present" | "absent" | "none";
@@ -333,7 +335,18 @@ export async function setAttendanceOverride(
   // check-in status, which is derived from attendance_records rather than
   // this table — see adminMarkPresentToday for why.
   if (status === "present" && date === kstDateString(Date.now())) {
-    await adminMarkPresentToday(studentId);
+    const checkInAt = await adminMarkPresentToday(studentId);
+    if (checkInAt !== null) {
+      const student = await findStudentById(studentId);
+      if (student) {
+        sendAdminAttendanceAlert({
+          action: "check-in",
+          studentName: student.name,
+          parentPhone: student.parentPhone,
+          timestamp: checkInAt,
+        });
+      }
+    }
   }
 
   const affectedDates = [date, prior?.makeup_date ?? null, status === "absent" ? makeupDate : null].filter(

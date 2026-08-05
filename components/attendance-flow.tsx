@@ -5,6 +5,7 @@ import { Keypad } from "./keypad";
 import { CheckCircleIcon, ClockIcon, UserIcon, XIcon } from "./icons";
 import { formatRemainingMinutes } from "@/lib/format";
 import { DAY_LABELS, type DayKey } from "@/lib/schedule";
+import { ATTENDANCE_UNDO_WINDOW_MS } from "@/lib/constants";
 
 type Phase = "phone" | "loading" | "names" | "empty" | "resolving" | "info";
 type StudentOption = { id: string; name: string; age: number | null; classDays: DayKey[] };
@@ -26,7 +27,6 @@ type ResolveFailure =
   | { ok: false; reason: "not-found" };
 
 const PHONE_LENGTH = 4;
-const TOAST_DURATION_MS = 4500;
 
 const ACTION_VERB: Record<AttendanceAction, string> = {
   "check-in": "등원",
@@ -106,7 +106,7 @@ export function AttendanceFlow() {
   const showToast = (next: ToastState) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast(next);
-    toastTimerRef.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
+    toastTimerRef.current = setTimeout(() => setToast(null), ATTENDANCE_UNDO_WINDOW_MS);
   };
 
   // Tapping a name is the confirmation — no separate 등원하기/하원하기 button.

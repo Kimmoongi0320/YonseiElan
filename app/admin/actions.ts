@@ -3,8 +3,17 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createStudent, deleteStudent, findStudentForEdit, todayKstDateStr, updateStudent } from "@/lib/students";
-import { adminCheckOut } from "@/lib/attendance";
+import {
+  createStudent,
+  deleteStudent,
+  findStudentById,
+  findStudentForEdit,
+  findStudentsByIds,
+  todayKstDateStr,
+  updateStudent,
+} from "@/lib/students";
+import { adminBulkCheckOut, adminCheckOut } from "@/lib/attendance";
+import { sendAdminAttendanceAlert, sendAdminAttendanceAlerts } from "@/lib/attendance-alert";
 import {
   clearAttendanceDayRecords,
   clearAttendanceOverride,
@@ -166,8 +175,50 @@ export async function deleteStudentAction(id: string) {
 export async function adminCheckOutAction(studentId: string): Promise<{ ok: boolean }> {
   await requireAdminSession();
   const result = await adminCheckOut(studentId);
+
+  if (result.ok) {
+    const student = await findStudentById(studentId);
+    if (student) {
+      sendAdminAttendanceAlert({
+        action: "check-out",
+        studentName: student.name,
+        parentPhone: student.parentPhone,
+        timestamp: result.record.checkOutAt,
+      });
+    }
+  }
+
   revalidatePath("/admin/dashboard");
   return { ok: result.ok };
+}
+
+export async function adminBulkCheckOutAction(studentIds: string[]): Promise<{ count: number }> {
+  await requireAdminSession();
+
+  const uniqueIds = Array.from(new Set(studentIds));
+  const records = await adminBulkCheckOut(uniqueIds);
+
+  if (records.length > 0) {
+    const students = await findStudentsByIds(records.map((r) => r.studentId));
+    const studentsById = new Map(students.map((s) => [s.id, s]));
+
+    const alerts = records.flatMap((record) => {
+      const student = studentsById.get(record.studentId);
+      if (!student) return [];
+      return [
+        {
+          action: "check-out" as const,
+          studentName: student.name,
+          parentPhone: student.parentPhone,
+          timestamp: record.checkOutAt,
+        },
+      ];
+    });
+    await sendAdminAttendanceAlerts(alerts);
+  }
+
+  revalidatePath("/admin/dashboard");
+  return { count: records.length };
 }
 
 export async function setAttendanceStatusAction(

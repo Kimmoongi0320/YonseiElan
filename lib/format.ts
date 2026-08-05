@@ -8,6 +8,7 @@ export function formatRemainingMinutes(ms: number): number {
 
 export function formatDateTime(ts: number): string {
   return new Date(ts).toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
     month: "long",
     day: "numeric",
     hour: "numeric",

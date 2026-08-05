@@ -104,6 +104,24 @@ export async function findStudentById(id: string): Promise<Student | null> {
   return { id: data.id, name: data.name, parentPhone: data.parent_phone };
 }
 
+// Batched variant of findStudentById for bulk operations (e.g. bulk check-out
+// alerts), so notifying N students costs one round trip instead of N.
+export async function findStudentsByIds(ids: string[]): Promise<Student[]> {
+  const validIds = ids.filter((id) => UUID_RE.test(id));
+  if (validIds.length === 0) return [];
+
+  const supabase = getSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("students")
+    .select("id, name, parent_phone")
+    .in("id", validIds)
+    .eq("is_active", true);
+
+  if (error) throw error;
+
+  return (data ?? []).map((s) => ({ id: s.id, name: s.name, parentPhone: s.parent_phone }));
+}
+
 // Narrow lookup for upsertStudentAction's start_date lock check — kept
 // separate from findStudentById (used by the kiosk check-in flow above),
 // which has no need for start_date.

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { adminCheckOutAction, deleteStudentAction } from "@/app/admin/actions";
+import { adminBulkCheckOutAction, adminCheckOutAction, deleteStudentAction } from "@/app/admin/actions";
 import { StatusBadge } from "./status-badge";
 import { StudentFormModal } from "./student-form-modal";
 import { ConfirmModal } from "./confirm-modal";
@@ -23,7 +23,10 @@ import { formatTime } from "@/lib/format";
 type StatusFilter = "all" | AttendanceStatus;
 type DayFilter = "all" | DayKey;
 
-type PendingConfirm = { type: "delete" | "checkout"; student: AdminStudent };
+type PendingConfirm =
+  | { type: "delete"; student: AdminStudent }
+  | { type: "checkout"; student: AdminStudent }
+  | { type: "bulk-checkout"; count: number };
 
 const FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "전체" },
@@ -122,8 +125,8 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
   const closeForm = () => setFormModal((s) => ({ ...s, open: false }));
 
   const handleBulkWithdraw = () => {
-    // TODO: implement bulk withdrawal for selected students (selected: Set<string>),
-    // then clear the selection with setSelected(new Set()) once it succeeds.
+    if (selected.size === 0) return;
+    setConfirmTarget({ type: "bulk-checkout", count: selected.size });
   };
 
   const runConfirm = async () => {
@@ -132,8 +135,11 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
     try {
       if (confirmTarget.type === "delete") {
         await deleteStudentAction(confirmTarget.student.id);
-      } else {
+      } else if (confirmTarget.type === "checkout") {
         await adminCheckOutAction(confirmTarget.student.id);
+      } else {
+        await adminBulkCheckOutAction(Array.from(selected));
+        setSelected(new Set());
       }
     } finally {
       setConfirmPending(false);
@@ -461,13 +467,15 @@ export function AdminDashboard({ students }: { students: AdminStudent[] }) {
 
       <ConfirmModal
         open={confirmTarget !== null}
-        title={confirmTarget?.type === "checkout" ? "하원 처리" : "학생 삭제"}
+        title={confirmTarget?.type === "delete" ? "학생 삭제" : "하원 처리"}
         message={
-          confirmTarget?.type === "checkout"
-            ? `${confirmTarget.student.name} 학생을 지금 하원 처리할까요? 등원 후 50분이 지나지 않았어도 처리됩니다.`
-            : `${confirmTarget?.student.name ?? ""} 학생을 삭제할까요? 출석 기록을 포함해 모든 정보가 영구적으로 삭제되며 복구할 수 없습니다.`
+          confirmTarget?.type === "delete"
+            ? `${confirmTarget.student.name} 학생을 삭제할까요? 출석 기록을 포함해 모든 정보가 영구적으로 삭제되며 복구할 수 없습니다.`
+            : confirmTarget?.type === "checkout"
+              ? `${confirmTarget.student.name} 학생을 지금 하원 처리할까요? 등원 후 50분이 지나지 않았어도 처리됩니다.`
+              : `선택한 학생 ${confirmTarget?.count ?? 0}명을 지금 하원 처리할까요? 등원하지 않았거나 이미 하원 처리된 학생은 변경되지 않습니다.`
         }
-        confirmLabel={confirmTarget?.type === "checkout" ? "하원 처리" : "삭제"}
+        confirmLabel={confirmTarget?.type === "delete" ? "삭제" : "하원 처리"}
         pending={confirmPending}
         onConfirm={runConfirm}
         onClose={() => setConfirmTarget(null)}
