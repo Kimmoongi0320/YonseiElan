@@ -79,6 +79,7 @@ export type Database = {
           status: string;
           makeup_date: string | null;
           makeup_time: string | null;
+          makeup_required: boolean;
           class_days_snapshot: string[] | null;
           created_at: string;
         };
@@ -89,6 +90,7 @@ export type Database = {
           status: string;
           makeup_date?: string | null;
           makeup_time?: string | null;
+          makeup_required?: boolean;
           class_days_snapshot?: string[] | null;
           created_at?: string;
         };
@@ -96,6 +98,7 @@ export type Database = {
           status?: string;
           makeup_date?: string | null;
           makeup_time?: string | null;
+          makeup_required?: boolean;
           class_days_snapshot?: string[] | null;
         };
         Relationships: [

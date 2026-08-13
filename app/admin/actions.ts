@@ -19,6 +19,7 @@ import {
   clearAttendanceOverride,
   getStudentMonthAttendance,
   setAttendanceMakeupDate,
+  setAttendanceMakeupRequired,
   setAttendanceOverride,
   type DayAttendanceInfo,
 } from "@/lib/attendance-calendar";
@@ -279,6 +280,22 @@ export async function setAttendanceMakeupDateAction(
   }
 
   const result = await setAttendanceMakeupDate(studentId, date, makeupDate, makeupDate === null ? null : makeupTime);
+  revalidatePath("/admin/dashboard");
+  return result;
+}
+
+export async function setAttendanceMakeupRequiredAction(
+  studentId: string,
+  date: string,
+  makeupRequired: boolean
+): Promise<Record<string, DayAttendanceInfo>> {
+  await requireAdminSession();
+
+  if (!DATE_RE.test(date)) {
+    throw new Error("Invalid date");
+  }
+
+  const result = await setAttendanceMakeupRequired(studentId, date, makeupRequired);
   revalidatePath("/admin/dashboard");
   return result;
 }

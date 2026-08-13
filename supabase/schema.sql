@@ -90,6 +90,7 @@ create table if not exists attendance_overrides (
   date date not null,
   status text not null check (status in ('present', 'absent')),
   makeup_date date,
+  makeup_required boolean not null default true,
   class_days_snapshot text[],
   created_at timestamptz not null default now(),
 
@@ -105,11 +106,19 @@ alter table attendance_overrides add column if not exists class_days_snapshot te
 -- Migration for pre-existing databases created before makeup_time was added.
 alter table attendance_overrides add column if not exists makeup_time text;
 
+-- Migration for pre-existing databases created before makeup_required was added.
+-- Defaults every pre-existing absence to "보강 필요" so nothing already
+-- scheduled silently drops out of the makeup count.
+alter table attendance_overrides add column if not exists makeup_required boolean not null default true;
+
 comment on column attendance_overrides.makeup_date is
   '결석(status=absent)에 대한 보강 예정 날짜. 그 날짜에 학생이 실제로 등원하면 보강완료로 표시됨.';
 
 comment on column attendance_overrides.makeup_time is
   'makeup_date에 예정된 보강 수업 시간 ("HH:MM"). makeup_date가 null이면 항상 null.';
+
+comment on column attendance_overrides.makeup_required is
+  '결석(status=absent)이 보강 대상인지 여부. 당일 결석처럼 정책상 보강을 주지 않기로 한 결석은 관리자가 false로 표시한다. false인 동안은 makeup_date/makeup_time도 항상 null로 유지되며, 월별 보강 집계에서 이 행은 제외된다.';
 
 comment on column attendance_overrides.class_days_snapshot is
   '이 행이 마지막으로 생성/수정된 시점의 students.class_days 값. 등원 요일이 나중에 바뀌어도 "정규 수업일이었는지" 판정은 이 스냅샷을 기준으로 한다. 이 컬럼이 추가되기 전에 만들어진 뒤로 한 번도 다시 수정되지 않은 행은 null.';

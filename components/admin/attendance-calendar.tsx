@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { TimeSelect } from "@/components/admin/time-select";
 import { ConfirmModal } from "@/components/admin/confirm-modal";
@@ -11,6 +11,7 @@ import {
   deleteStudentPaymentOverrideAction,
   getAttendanceCalendarDataAction,
   setAttendanceMakeupDateAction,
+  setAttendanceMakeupRequiredAction,
   setAttendanceStatusAction,
   setStudentPaymentOverrideAction,
   updateStudentPauseEndAction,
@@ -29,6 +30,11 @@ const STATUS_OPTIONS: { value: DayAttendanceStatus; label: string; activeClassNa
   { value: "present", label: "출석", activeClassName: "bg-emerald-500 text-white" },
   { value: "absent", label: "결석", activeClassName: "bg-rose-500 text-white" },
   { value: "none", label: "기록없음", activeClassName: "bg-navy-900 text-cream-50" },
+];
+
+const MAKEUP_REQUIRED_OPTIONS: { value: boolean; label: string; activeClassName: string }[] = [
+  { value: true, label: "보강 필요", activeClassName: "bg-amber-500 text-white" },
+  { value: false, label: "보강 없음", activeClassName: "bg-navy-900/70 text-cream-50" },
 ];
 
 function pad2(n: number): string {
@@ -59,6 +65,7 @@ function emptyDayInfo(): DayAttendanceInfo {
     checkOutAt: null,
     makeupDate: null,
     makeupTime: null,
+    makeupRequired: true,
     makeupForDates: [],
     makeupCompleted: false,
     targetFulfilled: false,
@@ -164,6 +171,26 @@ export function AttendanceCalendar({ student }: Props) {
   useEffect(() => {
     fetchAll(student.id, year, month);
   }, [student.id, year, month]);
+
+  // "잡은 보강일 수 / 이번 달에 보강이 필요한 결석 수" — scoped by each
+  // absence's OWN date (its key in `data`), not by where its makeup date
+  // lands, so an absence recorded this month keeps counting here even once
+  // a makeup is scheduled next month. Derived straight from `data` rather
+  // than fetched separately, since getStudentMonthAttendance already pulls
+  // in every absence whose own date falls in the viewed month — this stays
+  // correct through every optimistic edit below for free.
+  const monthPrefix = `${year}-${pad2(month)}-`;
+  const makeupSummary = useMemo(() => {
+    let total = 0;
+    let scheduled = 0;
+    for (const [dateStr, info] of Object.entries(data)) {
+      if (!dateStr.startsWith(monthPrefix)) continue;
+      if (info.status !== "absent" || !info.makeupRequired) continue;
+      total += 1;
+      if (info.makeupDate) scheduled += 1;
+    }
+    return { total, scheduled };
+  }, [data, monthPrefix]);
 
   // Pauses whose resume date hasn't passed yet — these are what the top
   // panel below manages (edit resume date / cancel) for quick access without
@@ -357,12 +384,40 @@ export function AttendanceCalendar({ student }: Props) {
       const entry = prev[dateStr] ?? emptyDayInfo();
       return {
         ...prev,
-        [dateStr]: { ...entry, status, makeupDate: status === "absent" ? entry.makeupDate : null },
+        [dateStr]: {
+          ...entry,
+          status,
+          makeupDate: status === "absent" ? entry.makeupDate : null,
+          // setAttendanceStatusAction always resets makeup_required to true
+          // server-side (see setAttendanceOverride's default) — a status
+          // change always starts a fresh absence, never revives a previous
+          // "보강 없음" toggle.
+          makeupRequired: true,
+        },
       };
     });
 
     const action: "present" | "absent" | "auto" = status === "none" ? "auto" : status;
     void withSaving(dateStr, () => setAttendanceStatusAction(student.id, dateStr, action));
+  };
+
+  const handleMakeupRequiredChange = (dateStr: string, makeupRequired: boolean) => {
+    setData((prev) => {
+      const entry = prev[dateStr];
+      if (!entry) return prev;
+      return {
+        ...prev,
+        [dateStr]: {
+          ...entry,
+          makeupRequired,
+          makeupDate: makeupRequired ? entry.makeupDate : null,
+          makeupTime: makeupRequired ? entry.makeupTime : null,
+          makeupCompleted: makeupRequired ? entry.makeupCompleted : false,
+        },
+      };
+    });
+
+    void withSaving(dateStr, () => setAttendanceMakeupRequiredAction(student.id, dateStr, makeupRequired));
   };
 
   const confirmClearAttendanceDay = async () => {
@@ -485,9 +540,23 @@ export function AttendanceCalendar({ student }: Props) {
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
-        <span className="text-sm font-semibold text-navy-900">
-          {year}년 {month}월
-        </span>
+        <div className="flex flex-col items-center space-y-0.5">
+          <span className="text-sm font-semibold text-navy-900">
+            {year}년 {month}월
+          </span>
+          {makeupSummary.total > 0 && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                makeupSummary.scheduled === makeupSummary.total
+                  ? "bg-emerald-50 text-emerald-600"
+                  : "bg-amber-50 text-amber-600"
+              }`}
+              title="보강 날짜를 잡은 결석 수 / 이번 달 보강 필요 결석 수"
+            >
+              보강 {makeupSummary.scheduled}/{makeupSummary.total}
+            </span>
+          )}
+        </div>
         <div className="relative">
           {student.paymentDay != null &&
             (() => {
@@ -605,15 +674,17 @@ export function AttendanceCalendar({ student }: Props) {
 
               const makeupLine =
                 info.status === "absent" && info.makeupDate
-                  ? { text: `보강 ${formatShortMonthDay(info.makeupDate)}`, done: info.makeupCompleted }
-                  : info.makeupForDates.length > 0
-                    ? {
-                        text: `${info.targetFulfilled ? "보강완료" : "보강예정"}${
-                          info.makeupForDates.length > 1 ? ` ×${info.makeupForDates.length}` : ""
-                        }${isRegularClassDay(dateStr, classDaysAsOf(dateStr, info.classDaysSnapshot)) ? " · 정규" : ""}`,
-                        done: info.targetFulfilled,
-                      }
-                    : null;
+                  ? { text: `보강 ${formatShortMonthDay(info.makeupDate)}`, tone: info.makeupCompleted ? "done" : "pending" as const }
+                  : info.status === "absent" && !info.makeupRequired
+                    ? { text: "보강없음", tone: "neutral" as const }
+                    : info.makeupForDates.length > 0
+                      ? {
+                          text: `${info.targetFulfilled ? "보강완료" : "보강예정"}${
+                            info.makeupForDates.length > 1 ? ` ×${info.makeupForDates.length}` : ""
+                          }${isRegularClassDay(dateStr, classDaysAsOf(dateStr, info.classDaysSnapshot)) ? " · 정규" : ""}`,
+                          tone: info.targetFulfilled ? "done" : "pending" as const,
+                        }
+                      : null;
 
               const statusClassName = paused
                 ? "border-slate-200 bg-slate-100"
@@ -667,7 +738,15 @@ export function AttendanceCalendar({ student }: Props) {
                       )}
 
                       {makeupLine && (
-                        <span className={`w-full font-medium ${makeupLine.done ? "text-emerald-600" : "text-amber-600"}`}>
+                        <span
+                          className={`w-full font-medium ${
+                            makeupLine.tone === "done"
+                              ? "text-emerald-600"
+                              : makeupLine.tone === "pending"
+                                ? "text-amber-600"
+                                : "text-navy-900/35"
+                          }`}
+                        >
                           {makeupLine.text}
                         </span>
                       )}
@@ -811,46 +890,70 @@ export function AttendanceCalendar({ student }: Props) {
           </div>
 
           {selectedInfo.status === "absent" && (
-            <label className="flex flex-col space-y-1.5 text-xs font-medium text-navy-900/50">
-              보강 날짜/시간
+            <div className="flex flex-col space-y-3">
               <div className="flex space-x-2">
-                <input
-                  type="date"
-                  value={selectedInfo.makeupDate ?? ""}
-                  disabled={selectedSaving}
-                  onChange={(e) => {
-                    const value = e.target.value || null;
-                    handleMakeupChange(visibleSelectedDate, value, selectedInfo.makeupTime);
-                  }}
-                  className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <TimeSelect
-                  key={visibleSelectedDate}
-                  defaultValue={selectedInfo.makeupTime ?? ""}
-                  disabled={selectedSaving || !selectedInfo.makeupDate}
-                  onChange={(next) => {
-                    handleMakeupChange(visibleSelectedDate, selectedInfo.makeupDate, next || null);
-                  }}
-                />
+                {MAKEUP_REQUIRED_OPTIONS.map((opt) => (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    disabled={selectedSaving}
+                    onClick={() => handleMakeupRequiredChange(visibleSelectedDate, opt.value)}
+                    className={`flex-1 rounded-xl px-4 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selectedInfo.makeupRequired === opt.value
+                        ? opt.activeClassName
+                        : "bg-white text-navy-900/60 hover:bg-navy-900/5"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-              {selectedInfo.makeupDate && (
-                <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
-                  {formatMonthDayLabel(selectedInfo.makeupDate)}
-                  {selectedInfo.makeupTime ? ` ${selectedInfo.makeupTime}` : ""}로{" "}
-                  {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
-                </span>
+
+              {selectedInfo.makeupRequired ? (
+                <label className="flex flex-col space-y-1.5 text-xs font-medium text-navy-900/50">
+                  보강 날짜/시간
+                  <div className="flex space-x-2">
+                    <input
+                      type="date"
+                      value={selectedInfo.makeupDate ?? ""}
+                      disabled={selectedSaving}
+                      onChange={(e) => {
+                        const value = e.target.value || null;
+                        handleMakeupChange(visibleSelectedDate, value, selectedInfo.makeupTime);
+                      }}
+                      className="w-full max-w-[160px] rounded-xl border border-navy-900/10 bg-white px-3 py-2 text-sm text-navy-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    <TimeSelect
+                      key={visibleSelectedDate}
+                      defaultValue={selectedInfo.makeupTime ?? ""}
+                      disabled={selectedSaving || !selectedInfo.makeupDate}
+                      onChange={(next) => {
+                        handleMakeupChange(visibleSelectedDate, selectedInfo.makeupDate, next || null);
+                      }}
+                    />
+                  </div>
+                  {selectedInfo.makeupDate && (
+                    <span className={`font-normal ${selectedInfo.makeupCompleted ? "text-emerald-600" : "text-navy-900/50"}`}>
+                      {formatMonthDayLabel(selectedInfo.makeupDate)}
+                      {selectedInfo.makeupTime ? ` ${selectedInfo.makeupTime}` : ""}로{" "}
+                      {selectedInfo.makeupCompleted ? "보강완료했어요" : "보강 예정이에요"}
+                    </span>
+                  )}
+                  {selectedInfo.makeupDate &&
+                    isRegularClassDay(
+                      selectedInfo.makeupDate,
+                      classDaysAsOf(selectedInfo.makeupDate, selectedInfo.classDaysSnapshot)
+                    ) && (
+                    <span className="font-normal text-amber-600">
+                      ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
+                      평소처럼 등원한 것인지 보강을 위해 온 것인지 구분되지 않으니 참고해주세요.
+                    </span>
+                  )}
+                </label>
+              ) : (
+                <p className="text-xs font-medium text-navy-900/40">이 결석은 보강 대상이 아니에요.</p>
               )}
-              {selectedInfo.makeupDate &&
-                isRegularClassDay(
-                  selectedInfo.makeupDate,
-                  classDaysAsOf(selectedInfo.makeupDate, selectedInfo.classDaysSnapshot)
-                ) && (
-                <span className="font-normal text-amber-600">
-                  ⚠ {formatMonthDayLabel(selectedInfo.makeupDate)}은 이미 정규 수업일이에요. 학생이 그날 그냥
-                  평소처럼 등원한 것인지 보강을 위해 온 것인지 구분되지 않으니 참고해주세요.
-                </span>
-              )}
-            </label>
+            </div>
           )}
 
           {selectedInfo.makeupForDates.length > 0 && (
